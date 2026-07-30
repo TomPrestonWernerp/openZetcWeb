@@ -249,7 +249,7 @@
                     <div class="repo-input-field">
                       <a-input
                         v-model:value="remoteInstallForm.source"
-                        placeholder="来源仓库，如 anthropics/skills 或 GitHub URL"
+                        placeholder="来源仓库，如 owner/repo 或代码仓库 URL"
                         :disabled="installingRemoteSkill"
                       >
                         <template #suffix>
@@ -313,7 +313,7 @@
                     </a-button>
                   </div>
                   <div class="repo-hint-text">
-                    支持 `owner/repo` 或 GitHub URL。可前往
+                    支持 `owner/repo` 或代码仓库 URL。可前往
                     <a href="https://skills.sh/" target="_blank" rel="noopener noreferrer"
                       >skills.sh</a
                     >
@@ -685,7 +685,7 @@ const remoteInstallModalVisible = ref(false)
 const activeTab = ref('repo') // 'repo' 或 'search'
 
 const remoteInstallForm = reactive({
-  source: 'https://github.com/anthropics/skills',
+  source: '',
   skills: []
 })
 const remoteSkillOptions = ref([])
