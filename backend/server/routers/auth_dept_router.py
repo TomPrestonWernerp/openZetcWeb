@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.storage.postgres.models_business import APIKey, Department, User
 from yuxi.repositories.department_repository import DepartmentRepository
 from yuxi.repositories.user_repository import UserRepository
-from server.utils.auth_middleware import get_superadmin_user, get_admin_user, get_db
+from server.utils.auth_middleware import get_required_user, get_admin_user, get_db
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.operation_log_service import log_operation
 from yuxi.services.user_identity_service import is_valid_phone_number
@@ -22,6 +22,7 @@ from yuxi.services.knowledge_permission_service import (
     normalize_department_role_permissions,
     normalize_permission_policy,
 )
+from yuxi.services.rbac_service import require_permission, sync_user_system_role
 
 # 创建路由器
 department = APIRouter(prefix="/departments", tags=["department"])
@@ -152,17 +153,27 @@ async def update_department_role_permissions(
 
 
 @department.get("", response_model=list[DepartmentResponse])
-async def get_departments(current_user: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+async def get_departments(
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
     """获取所有部门列表（管理员可访问）"""
+    permission_scope = await require_permission(db, current_user, "department.view")
     dept_repo = DepartmentRepository()
-    return await dept_repo.list_with_user_count()
+    departments = await dept_repo.list_with_user_count()
+    if permission_scope == "global":
+        return departments
+    return [item for item in departments if int(item["id"]) == int(current_user.department_id or 0)]
 
 
 @department.get("/{department_id}", response_model=DepartmentResponse)
 async def get_department(
-    department_id: int, current_user: User = Depends(get_superadmin_user), db: AsyncSession = Depends(get_db)
+    department_id: int,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """获取指定部门详情"""
+    await require_permission(db, current_user, "department.view", department_id=department_id)
     result = await db.execute(select(Department).filter(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -182,10 +193,16 @@ async def get_department(
 async def create_department(
     department_data: DepartmentCreate,
     request: Request,
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """创建新部门，同时创建该部门的管理员"""
+    permission_scope = await require_permission(db, current_user, "department.create")
+    if permission_scope != "global":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="创建新部门需要全局部门创建权限",
+        )
     dept_repo = DepartmentRepository()
     user_repo = UserRepository()
 
@@ -235,7 +252,7 @@ async def create_department(
 
     # 创建管理员用户
     hashed_password = AuthUtils.hash_password(department_data.admin_password)
-    await user_repo.create(
+    new_admin = await user_repo.create(
         {
             "username": admin_uid,
             "uid": admin_uid,
@@ -245,6 +262,13 @@ async def create_department(
             "department_id": new_department.id,
         }
     )
+    await sync_user_system_role(
+        db,
+        new_admin,
+        "admin",
+        assigned_by_user_id=current_user.id,
+    )
+    await db.commit()
 
     # 记录操作
     await log_operation(
@@ -259,10 +283,11 @@ async def update_department(
     department_id: int,
     department_data: DepartmentUpdate,
     request: Request,
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """更新部门信息"""
+    await require_permission(db, current_user, "department.update", department_id=department_id)
     result = await db.execute(select(Department).filter(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -299,10 +324,11 @@ async def update_department(
 async def delete_department(
     department_id: int,
     request: Request,
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """删除部门"""
+    await require_permission(db, current_user, "department.delete", department_id=department_id)
     # 检查部门是否存在
     result = await db.execute(select(Department).filter(Department.id == department_id))
     department = result.scalar_one_or_none()

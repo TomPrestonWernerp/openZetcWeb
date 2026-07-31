@@ -13,11 +13,65 @@ export const useUserStore = defineStore('user', () => {
   const userRole = ref('')
   const departmentId = ref(null)
   const departmentName = ref('')
+  const accessInfo = ref({ roles: [], permissions: {} })
 
   // 计算属性
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userRole.value === 'admin' || userRole.value === 'superadmin')
   const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+  const permissions = computed(() => accessInfo.value?.permissions || {})
+  const canManageUsers = computed(
+    () =>
+      isSuperAdmin.value ||
+      Boolean(
+        permissions.value['user.create'] ||
+          permissions.value['user.update'] ||
+          permissions.value['user.delete'] ||
+          permissions.value['user.assign_role']
+      )
+  )
+  const canManageDepartments = computed(
+    () =>
+      isSuperAdmin.value ||
+      Boolean(
+        permissions.value['department.create'] ||
+          permissions.value['department.update'] ||
+          permissions.value['department.delete']
+      )
+  )
+  const canManageAccess = computed(
+    () =>
+      isSuperAdmin.value ||
+      Boolean(
+        permissions.value['role.create'] ||
+          permissions.value['role.update'] ||
+          permissions.value['role.delete'] ||
+          permissions.value['role.assign'] ||
+          permissions.value['user.assign_role'] ||
+          permissions.value['department.create'] ||
+          permissions.value['department.update'] ||
+          permissions.value['department.delete']
+      )
+  )
+
+  function hasPermission(code, minimumScope = 'own') {
+    const ranks = { own: 1, department: 2, global: 3 }
+    return (ranks[permissions.value[code]] || 0) >= (ranks[minimumScope] || 1)
+  }
+
+  async function loadAccess() {
+    if (!token.value) {
+      accessInfo.value = { roles: [], permissions: {} }
+      return accessInfo.value
+    }
+    const response = await fetch('/api/rbac/me', { headers: getAuthHeaders() })
+    if (!response.ok) {
+      accessInfo.value = { roles: [], permissions: {} }
+      return accessInfo.value
+    }
+    accessInfo.value = await response.json()
+    return accessInfo.value
+  }
 
   // 动作
   async function login(credentials) {
@@ -61,6 +115,7 @@ export const useUserStore = defineStore('user', () => {
 
       // 只保存 token 到本地存储
       localStorage.setItem('user_token', data.access_token)
+      await loadAccess()
 
       return true
     } catch (error) {
@@ -80,6 +135,7 @@ export const useUserStore = defineStore('user', () => {
     userRole.value = ''
     departmentId.value = null
     departmentName.value = ''
+    accessInfo.value = { roles: [], permissions: {} }
 
     // 清除 agentStore 状态，确保重新登录时能正确加载数据
     const agentStore = useAgentStore()
@@ -119,6 +175,7 @@ export const useUserStore = defineStore('user', () => {
 
       // 只保存 token 到本地存储
       localStorage.setItem('user_token', data.access_token)
+      await loadAccess()
 
       return true
     } catch (error) {
@@ -329,6 +386,7 @@ export const useUserStore = defineStore('user', () => {
       userRole.value = userData.role
       departmentId.value = userData.department_id || null
       departmentName.value = userData.department_name || ''
+      await loadAccess()
 
       return userData
     } catch (error) {
@@ -382,11 +440,16 @@ export const useUserStore = defineStore('user', () => {
     userRole,
     departmentId,
     departmentName,
+    accessInfo,
 
     // 计算属性
     isLoggedIn,
     isAdmin,
     isSuperAdmin,
+    permissions,
+    canManageUsers,
+    canManageDepartments,
+    canManageAccess,
 
     // 方法
     login,
@@ -394,6 +457,8 @@ export const useUserStore = defineStore('user', () => {
     initialize,
     checkFirstRun,
     getAuthHeaders,
+    hasPermission,
+    loadAccess,
     getUsers,
     createUser,
     updateUser,

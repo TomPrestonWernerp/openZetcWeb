@@ -1086,8 +1086,7 @@ async def test_update_skill_enabled_allows_builtin(monkeypatch: pytest.MonkeyPat
         enabled=True,
     )
 
-    async def fake_get_manageable_skill_or_raise(_db, user, slug: str):
-        assert user.uid == "root"
+    async def fake_get_skill_or_raise(_db, slug: str):
         assert slug == "reporter"
         return builtin_item
 
@@ -1100,7 +1099,7 @@ async def test_update_skill_enabled_allows_builtin(monkeypatch: pytest.MonkeyPat
             item.updated_by = updated_by
             return item
 
-    monkeypatch.setattr(svc, "get_manageable_skill_or_raise", fake_get_manageable_skill_or_raise)
+    monkeypatch.setattr(svc, "get_skill_or_raise", fake_get_skill_or_raise)
     monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
 
     updated = await svc.update_skill_enabled(None, slug="reporter", enabled=False, operator=_user("root"))

@@ -224,8 +224,8 @@ def test_dependency_options_route_checks_manage_permission(monkeypatch):
 def test_skill_tree_and_file_routes_check_management_read_permission(monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_get_management_readable_skill_or_raise(_db, user, slug):
-        captured.setdefault("read", []).append({"slug": slug, "operator_uid": user.uid})
+    async def fake_get_skill_or_raise(_db, slug):
+        captured.setdefault("read", []).append(slug)
         return _skill(slug=slug, created_by="user", enabled=False)
 
     async def fake_get_skill_tree(_db, slug):
@@ -237,8 +237,8 @@ def test_skill_tree_and_file_routes_check_management_read_permission(monkeypatch
         return {"path": path, "content": "---\nname: demo\n---\n"}
 
     monkeypatch.setattr(
-        "server.routers.skill_router.get_management_readable_skill_or_raise",
-        fake_get_management_readable_skill_or_raise,
+        "server.routers.skill_router.get_skill_or_raise",
+        fake_get_skill_or_raise,
     )
     monkeypatch.setattr("server.routers.skill_router.get_skill_tree", fake_get_skill_tree)
     monkeypatch.setattr("server.routers.skill_router.read_skill_file", fake_read_skill_file)
@@ -249,40 +249,40 @@ def test_skill_tree_and_file_routes_check_management_read_permission(monkeypatch
 
     assert tree_resp.status_code == 200, tree_resp.text
     assert file_resp.status_code == 200, file_resp.text
-    assert captured["read"] == [
-        {"slug": "demo", "operator_uid": "user"},
-        {"slug": "demo", "operator_uid": "user"},
-    ]
+    assert captured["read"] == ["demo", "demo"]
     assert captured["tree_slug"] == "demo"
     assert captured["file"] == {"slug": "demo", "path": "SKILL.md"}
 
 
-def test_skill_export_route_still_checks_manage_permission(monkeypatch, tmp_path):
+def test_skill_export_route_checks_view_permission(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
     export_path = tmp_path / "demo.zip"
     export_path.write_bytes(b"zip")
 
-    async def fake_get_manageable_skill_or_raise(_db, user, slug):
-        captured["manageable"] = {"slug": slug, "operator_uid": user.uid}
+    async def fake_get_skill_or_raise(_db, slug):
+        captured["readable"] = slug
         return _skill(slug=slug)
 
     async def fake_export_skill_zip(_db, slug):
         captured["export_slug"] = slug
         return str(export_path), "demo.zip"
 
-    monkeypatch.setattr("server.routers.skill_router.get_manageable_skill_or_raise", fake_get_manageable_skill_or_raise)
+    monkeypatch.setattr("server.routers.skill_router.get_skill_or_raise", fake_get_skill_or_raise)
     monkeypatch.setattr("server.routers.skill_router.export_skill_zip", fake_export_skill_zip)
 
     client = TestClient(_build_app())
     resp = client.get("/api/system/skills/demo/export")
 
     assert resp.status_code == 200, resp.text
-    assert captured["manageable"] == {"slug": "demo", "operator_uid": "admin"}
+    assert captured["readable"] == "demo"
     assert captured["export_slug"] == "demo"
 
 
 def test_update_skill_dependencies_route_passes_operator(monkeypatch):
     captured: dict[str, object] = {}
+
+    async def fake_get_skill_or_raise(_db, slug):
+        return _skill(slug=slug)
 
     async def fake_update_skill_dependencies(
         _db,
@@ -301,6 +301,7 @@ def test_update_skill_dependencies_route_passes_operator(monkeypatch):
         return _skill(slug=slug)
 
     monkeypatch.setattr("server.routers.skill_router.update_skill_dependencies", fake_update_skill_dependencies)
+    monkeypatch.setattr("server.routers.skill_router.get_skill_or_raise", fake_get_skill_or_raise)
 
     client = TestClient(_build_app())
     resp = client.put(
@@ -322,12 +323,17 @@ def test_update_skill_dependencies_route_passes_operator(monkeypatch):
     }
 
 
-def test_builtin_routes_require_admin():
+def test_builtin_routes_allow_users_with_skill_view(monkeypatch):
+    async def fake_list_skills(_db):
+        return [_skill(slug="builtin-demo", source_type="builtin")]
+
+    monkeypatch.setattr("server.routers.skill_router.list_skills", fake_list_skills)
     client = TestClient(_build_app(role="user"))
 
     resp = client.get("/api/system/skills/builtin")
 
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert resp.json()["data"][0]["slug"] == "builtin-demo"
 
 
 def test_sync_builtin_skills_route(monkeypatch):

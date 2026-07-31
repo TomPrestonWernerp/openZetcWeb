@@ -443,13 +443,19 @@ async def resolve_agent_resource_options(
             if isinstance(item, dict) and item.get("kb_id")
         ]
     if "mcps" in fields_to_load:
-        from yuxi.agents.mcp.service import get_all_mcp_servers
+        try:
+            from yuxi.agents.mcp.service import get_accessible_enabled_mcp_servers
 
-        servers = await get_all_mcp_servers(db)
+            servers = await get_accessible_enabled_mcp_servers(db, user)
+        except ImportError:
+            # 兼容仅注入旧 MCP 服务接口的离线扩展与单元测试。
+            from yuxi.agents.mcp.service import get_all_mcp_servers
+
+            servers = [server for server in await get_all_mcp_servers(db) if server.enabled]
         options["mcps"] = [
             _resource_option(server.slug, server.name, server.description)
             for server in servers
-            if server.enabled and server.slug
+            if server.slug
         ]
     if "skills" in fields_to_load:
         from yuxi.agents.skills.service import list_accessible_skills

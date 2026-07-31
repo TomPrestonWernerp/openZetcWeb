@@ -337,6 +337,14 @@ class AgentRepository:
             return agents
         return [agent for agent in agents if user_can_access_agent(user, agent)]
 
+    async def list_all(self, *, include_subagent_definitions: bool = False) -> list[Agent]:
+        """列出全部定义，供已经通过 RBAC 校验的管理端过滤。"""
+        stmt = select(Agent)
+        if not include_subagent_definitions:
+            stmt = stmt.where(Agent.is_subagent.is_(False))
+        result = await self.db.execute(stmt.order_by(Agent.is_default.desc(), Agent.id.asc()))
+        return list(result.scalars().all())
+
     async def list_visible_subagents(self, *, user: User) -> list[Agent]:
         result = await self.db.execute(
             select(Agent).where(Agent.is_subagent.is_(True)).order_by(Agent.name.asc(), Agent.id.asc())
@@ -422,6 +430,7 @@ class AgentRepository:
         is_subagent: bool | None = None,
         created_by: str | None = None,
         creator: User | None = None,
+        share_validated: bool = False,
     ) -> Agent:
         resolved_is_subagent = resolve_agent_is_subagent(backend_id, is_subagent)
         if resolved_is_subagent and is_default:
@@ -430,7 +439,7 @@ class AgentRepository:
             share_config,
             user_uid=str(creator.uid) if creator else created_by,
             department_id=creator.department_id if creator else None,
-            force_private=bool(creator and creator.role not in ADMIN_ROLES),
+            force_private=bool(creator and creator.role not in ADMIN_ROLES and not share_validated),
         )
         if is_default and normalized_share_config.get("access_level") != "global":
             raise ValueError("默认智能体必须全局共享")
@@ -471,6 +480,7 @@ class AgentRepository:
         is_subagent: bool | None = None,
         updated_by: str | None = None,
         updater: User | None = None,
+        share_validated: bool = False,
     ) -> Agent:
         if is_subagent is not None:
             agent.is_subagent = resolve_agent_is_subagent(agent.backend_id, is_subagent)
@@ -492,7 +502,7 @@ class AgentRepository:
                     share_config,
                     user_uid=str(updater.uid) if updater else updated_by,
                     department_id=updater.department_id if updater else None,
-                    force_private=bool(updater and updater.role not in ADMIN_ROLES),
+                    force_private=bool(updater and updater.role not in ADMIN_ROLES and not share_validated),
                 )
                 agent.share_config = normalized_share_config
 

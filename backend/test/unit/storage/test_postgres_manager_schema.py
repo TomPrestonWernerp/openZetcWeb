@@ -138,3 +138,26 @@ async def test_ensure_business_schema_removes_unbound_api_keys_before_requiring_
     assert statements.index("DELETE FROM api_keys WHERE user_id IS NULL") < statements.index(
         "ALTER TABLE IF EXISTS api_keys ALTER COLUMN user_id SET NOT NULL"
     )
+
+
+@pytest.mark.asyncio
+async def test_ensure_business_schema_creates_unified_rbac_and_resource_scope_columns():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_business_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+    for table in ("rbac_permissions", "rbac_roles", "rbac_role_permissions", "rbac_user_roles"):
+        assert f"CREATE TABLE IF NOT EXISTS {table}" in statements
+    assert "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS department_id" in statements
+    assert "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS department_id" in statements
+    assert "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS share_config" in statements

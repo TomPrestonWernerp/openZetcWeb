@@ -194,6 +194,43 @@ async def get_enabled_mcp_server_slugs(*, db: AsyncSession | None = None) -> lis
         return await get_enabled_mcp_server_slugs(db=session)
 
 
+def user_can_access_mcp_server(user, server: MCPServer) -> bool:
+    if user.role == "superadmin" or server.created_by_uid == user.uid:
+        return True
+    config = server.share_config or {"access_level": "global"}
+    level = config.get("access_level") or "global"
+    if level == "global":
+        return True
+    if level == "department":
+        try:
+            return int(user.department_id or 0) in {
+                int(value) for value in config.get("department_ids") or []
+            }
+        except (TypeError, ValueError):
+            return False
+    return str(user.uid) in {str(value) for value in config.get("user_uids") or []}
+
+
+async def get_accessible_enabled_mcp_servers(db: AsyncSession, user) -> list[MCPServer]:
+    """返回同时满足共享范围与 mcp.use 权限的已启用 MCP。"""
+    from yuxi.services.rbac_service import has_permission
+
+    result = await db.execute(select(MCPServer).where(MCPServer.enabled == 1))
+    accessible = []
+    for server in result.scalars().all():
+        if not user_can_access_mcp_server(user, server):
+            continue
+        if await has_permission(
+            db,
+            user,
+            "mcp.use",
+            owner_uid=server.created_by_uid,
+            department_id=server.department_id,
+        ):
+            accessible.append(server)
+    return accessible
+
+
 async def get_mcp_tools(
     server_slug: str,
     additional_servers: dict[str, dict[str, Any]] | None = None,

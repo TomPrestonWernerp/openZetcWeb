@@ -38,6 +38,7 @@ def test_department_manager_policy_can_manage_department_shared_database():
     policy = DEFAULT_ROLE_PERMISSIONS["admin"]
     database = {
         "created_by": "other-user",
+        "department_id": 7,
         "share_config": {"access_level": "department", "department_ids": [7]},
     }
 

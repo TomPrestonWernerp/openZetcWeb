@@ -50,7 +50,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'user' }"
             @click="activeTab = 'user'"
-            v-if="userStore.isAdmin"
+            v-if="userStore.canManageUsers"
           >
             <User class="icon" :size="18" />
             <span>用户管理</span>
@@ -59,7 +59,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'rolePermissions' }"
             @click="activeTab = 'rolePermissions'"
-            v-if="userStore.isAdmin"
+            v-if="userStore.canManageAccess"
           >
             <ShieldCheck class="icon" :size="18" />
             <span>角色权限</span>
@@ -68,7 +68,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
-            v-if="userStore.isSuperAdmin"
+            v-if="userStore.canManageDepartments"
           >
             <Users class="icon" :size="18" />
             <span>部门管理</span>
@@ -123,7 +123,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'user' }"
           @click="activeTab = 'user'"
-          v-if="userStore.isAdmin"
+          v-if="userStore.canManageUsers"
         >
           用户管理
         </div>
@@ -131,7 +131,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'rolePermissions' }"
           @click="activeTab = 'rolePermissions'"
-          v-if="userStore.isAdmin"
+          v-if="userStore.canManageAccess"
         >
           角色权限
         </div>
@@ -139,7 +139,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
-          v-if="userStore.isSuperAdmin"
+          v-if="userStore.canManageDepartments"
         >
           部门管理
         </div>
@@ -164,15 +164,18 @@
             <BasicSettingsSection />
           </div>
 
-          <div v-show="activeTab === 'user'" v-if="userStore.isAdmin">
+          <div v-show="activeTab === 'user'" v-if="userStore.canManageUsers">
             <UserManagementComponent />
           </div>
 
-          <div v-show="activeTab === 'rolePermissions'" v-if="userStore.isAdmin">
+          <div v-show="activeTab === 'rolePermissions'" v-if="userStore.canManageAccess">
             <RolePermissionManagementComponent />
           </div>
 
-          <div v-show="activeTab === 'department'" v-if="userStore.isSuperAdmin">
+          <div
+            v-show="activeTab === 'department'"
+            v-if="userStore.canManageDepartments"
+          >
             <DepartmentManagementComponent />
           </div>
         </div>
@@ -226,8 +229,10 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'user', 'rolePermissions')
-  if (userStore.isSuperAdmin) tabs.push('department')
+  if (userStore.isAdmin) tabs.push('base')
+  if (userStore.canManageUsers) tabs.push('user')
+  if (userStore.canManageAccess) tabs.push('rolePermissions')
+  if (userStore.canManageDepartments) tabs.push('department')
   return tabs
 })
 
@@ -236,7 +241,9 @@ const setActiveTab = (preferredTab) => {
     activeTab.value = preferredTab
     return
   }
-  activeTab.value = userStore.isAdmin ? 'base' : availableTabs.value[0]
+  activeTab.value = userStore.isAdmin && availableTabs.value.includes('base')
+    ? 'base'
+    : availableTabs.value[0]
 }
 
 const handleClose = () => {

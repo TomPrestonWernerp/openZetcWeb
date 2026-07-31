@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from server.utils.auth_middleware import get_db, get_required_user
 from yuxi.agents.skills.service import (
     confirm_skill_install_draft,
     create_skill_node,
@@ -18,9 +18,8 @@ from yuxi.agents.skills.service import (
     delete_skills_batch,
     discard_skill_install_draft,
     export_skill_zip,
-    get_allowed_skill_access_levels,
     get_manageable_skill_or_raise,
-    get_management_readable_skill_or_raise,
+    get_skill_or_raise,
     get_skill_dependency_options,
     get_skill_tree,
     init_builtin_skills,
@@ -35,7 +34,12 @@ from yuxi.agents.skills.service import (
     update_skill_enabled,
     update_skill_file,
     update_skill_share_config,
-    user_can_manage_skill,
+)
+from yuxi.services.rbac_service import (
+    get_user_permission_map,
+    has_permission,
+    require_permission,
+    validate_share_config,
 )
 from yuxi.agents.skills.remote_install import list_remote_skills, search_remote_skills
 from yuxi.storage.postgres.models_business import User
@@ -111,11 +115,48 @@ def _summarize_results(results: list[dict]) -> dict[str, int]:
     }
 
 
-def _serialize_skill_for_user(item, user: User) -> dict:
+async def _serialize_skill_for_user(db: AsyncSession, item, user: User) -> dict:
     data = item.to_dict()
-    data["can_manage"] = user_can_manage_skill(user, item)
+    data["can_manage"] = await has_permission(
+        db, user, "skill.update", owner_uid=item.created_by, department_id=item.department_id
+    )
+    data["access"] = {
+        "can_view": await has_permission(
+            db, user, "skill.view", owner_uid=item.created_by, department_id=item.department_id
+        ),
+        "can_update": data["can_manage"],
+        "can_delete": await has_permission(
+            db, user, "skill.delete", owner_uid=item.created_by, department_id=item.department_id
+        ),
+        "can_enable": await has_permission(
+            db, user, "skill.enable", owner_uid=item.created_by, department_id=item.department_id
+        ),
+        "can_share": await has_permission(
+            db, user, "skill.share", owner_uid=item.created_by, department_id=item.department_id
+        ),
+    }
     data["is_builtin"] = is_builtin_skill(item)
     return data
+
+
+async def _require_skill_permission(
+    db: AsyncSession,
+    user: User,
+    slug: str,
+    code: str,
+):
+    try:
+        item = await get_skill_or_raise(db, slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await require_permission(
+        db,
+        user,
+        code,
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
+    return item
 
 
 @user_skills.get("/accessible")
@@ -123,9 +164,13 @@ async def list_accessible_skills_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.view")
     try:
         items = await list_accessible_skills(db, current_user)
-        return {"success": True, "data": [_serialize_skill_for_user(item, current_user) for item in items]}
+        return {
+            "success": True,
+            "data": [await _serialize_skill_for_user(db, item, current_user) for item in items],
+        }
     except Exception as e:
         logger.error(f"Failed to list accessible skills: {e}")
         raise HTTPException(status_code=500, detail="获取可访问 Skills 失败")
@@ -137,6 +182,7 @@ async def prepare_skill_upload_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.install")
     try:
         data = await prepare_skill_upload(
             db,
@@ -153,7 +199,12 @@ async def prepare_skill_upload_route(
 
 
 @user_skills.post("/remote/list")
-async def list_remote_skills_route(payload: RemoteSkillSourceRequest, _current_user: User = Depends(get_required_user)):
+async def list_remote_skills_route(
+    payload: RemoteSkillSourceRequest,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_permission(db, current_user, "skill.install")
     try:
         return {"success": True, "data": await list_remote_skills(payload.source)}
     except ValueError as e:
@@ -165,8 +216,11 @@ async def list_remote_skills_route(payload: RemoteSkillSourceRequest, _current_u
 
 @user_skills.post("/remote/search")
 async def search_remote_skills_route(
-    payload: RemoteSkillSearchRequest, _current_user: User = Depends(get_required_user)
+    payload: RemoteSkillSearchRequest,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.install")
     try:
         return {"success": True, "data": await search_remote_skills(payload.query)}
     except ValueError as e:
@@ -182,6 +236,7 @@ async def prepare_remote_skills_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.install")
     try:
         data = await prepare_remote_skill_install(
             db,
@@ -204,11 +259,25 @@ async def confirm_skill_install_draft_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.install")
     try:
+        requested_share_config = payload.share_config or {
+            "access_level": "user",
+            "department_ids": [],
+            "user_uids": [current_user.uid],
+        }
+        effective_share_config = await validate_share_config(
+            db,
+            current_user,
+            "skill.share",
+            requested_share_config,
+            owner_uid=current_user.uid,
+            department_id=current_user.department_id,
+        )
         results = await confirm_skill_install_draft(
             db,
             draft_id=draft_id,
-            share_config=payload.share_config,
+            share_config=effective_share_config,
             operator=current_user,
         )
         return {"success": True, "data": results, "summary": _summarize_results(results)}
@@ -220,7 +289,12 @@ async def confirm_skill_install_draft_route(
 
 
 @user_skills.delete("/install-drafts/{draft_id}")
-async def discard_skill_install_draft_route(draft_id: str, current_user: User = Depends(get_required_user)):
+async def discard_skill_install_draft_route(
+    draft_id: str,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_permission(db, current_user, "skill.install")
     try:
         await discard_skill_install_draft(draft_id=draft_id, operator=current_user)
         return {"success": True}
@@ -236,12 +310,19 @@ async def list_skills_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.view")
     try:
         items = await list_visible_skills_for_management(db, current_user)
+        share_scope = (await get_user_permission_map(db, current_user)).get("skill.share")
+        allowed_access_levels = ["user"]
+        if share_scope in {"department", "global"}:
+            allowed_access_levels.insert(0, "department")
+        if share_scope == "global":
+            allowed_access_levels.insert(0, "global")
         return {
             "success": True,
-            "data": [_serialize_skill_for_user(item, current_user) for item in items],
-            "allowed_access_levels": get_allowed_skill_access_levels(current_user),
+            "data": [await _serialize_skill_for_user(db, item, current_user) for item in items],
+            "allowed_access_levels": allowed_access_levels,
         }
     except Exception as e:
         logger.error(f"Failed to list manageable skills: {e}")
@@ -267,9 +348,10 @@ async def get_skill_dependency_options_route(
 
 @skills.get("/builtin")
 async def list_builtin_skills_route(
-    _current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_permission(db, current_user, "skill.view")
     try:
         items = [item for item in await list_skills(db) if item.source_type == "builtin"]
         return {"success": True, "data": [item.to_dict() for item in items]}
@@ -282,9 +364,12 @@ async def list_builtin_skills_route(
 
 @skills.post("/builtin/sync")
 async def sync_builtin_skills_route(
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    scope = await require_permission(db, current_user, "skill.install")
+    if scope != "global":
+        raise HTTPException(status_code=403, detail="同步系统内置 Skill 需要全公司权限")
     try:
         items = await init_builtin_skills(db, created_by=current_user.uid)
         return {"success": True, "data": [item.to_dict() for item in items]}
@@ -302,9 +387,23 @@ async def update_skill_share_config_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    item = await _require_skill_permission(db, current_user, slug, "skill.share")
     try:
-        item = await update_skill_share_config(db, slug=slug, share_config=payload.share_config, operator=current_user)
-        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
+        effective_share_config = await validate_share_config(
+            db,
+            current_user,
+            "skill.share",
+            payload.share_config,
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+        item = await update_skill_share_config(
+            db,
+            slug=slug,
+            share_config=effective_share_config,
+            operator=current_user,
+        )
+        return {"success": True, "data": await _serialize_skill_for_user(db, item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
@@ -319,9 +418,10 @@ async def update_skill_enabled_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.enable")
     try:
         item = await update_skill_enabled(db, slug=slug, enabled=payload.enabled, operator=current_user)
-        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
+        return {"success": True, "data": await _serialize_skill_for_user(db, item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
@@ -335,8 +435,8 @@ async def get_skill_tree_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.view")
     try:
-        await get_management_readable_skill_or_raise(db, current_user, slug)
         return {"success": True, "data": await get_skill_tree(db, slug)}
     except ValueError as e:
         _raise_from_value_error(e)
@@ -352,8 +452,8 @@ async def get_skill_file_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.view")
     try:
-        await get_management_readable_skill_or_raise(db, current_user, slug)
         return {"success": True, "data": await read_skill_file(db, slug, path)}
     except ValueError as e:
         _raise_from_value_error(e)
@@ -369,6 +469,7 @@ async def create_skill_file_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.update")
     try:
         await get_manageable_skill_or_raise(db, current_user, slug)
         await create_skill_node(
@@ -394,6 +495,7 @@ async def update_skill_file_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.update")
     try:
         await get_manageable_skill_or_raise(db, current_user, slug)
         await update_skill_file(
@@ -418,6 +520,7 @@ async def update_skill_dependencies_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.update")
     try:
         item = await update_skill_dependencies(
             db,
@@ -427,7 +530,7 @@ async def update_skill_dependencies_route(
             skill_dependencies=payload.skill_dependencies,
             operator=current_user,
         )
-        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
+        return {"success": True, "data": await _serialize_skill_for_user(db, item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
@@ -442,6 +545,7 @@ async def delete_skill_file_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.update")
     try:
         await get_manageable_skill_or_raise(db, current_user, slug)
         await delete_skill_node(db, slug=slug, relative_path=path)
@@ -460,8 +564,8 @@ async def export_skill_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.view")
     try:
-        await get_manageable_skill_or_raise(db, current_user, slug)
         export_path, download_name = await export_skill_zip(db, slug)
         background_tasks.add_task(_cleanup_export_file, export_path)
         return FileResponse(path=export_path, media_type="application/zip", filename=download_name)
@@ -478,8 +582,8 @@ async def delete_skill_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_skill_permission(db, current_user, slug, "skill.delete")
     try:
-        await get_manageable_skill_or_raise(db, current_user, slug)
         await delete_skill(db, slug=slug)
         return {"success": True}
     except ValueError as e:
@@ -495,9 +599,9 @@ async def delete_skills_batch_route(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    for slug in payload.slugs:
+        await _require_skill_permission(db, current_user, slug, "skill.delete")
     try:
-        for slug in payload.slugs:
-            await get_manageable_skill_or_raise(db, current_user, slug)
         results = await delete_skills_batch(db, slugs=payload.slugs)
         return {"success": True, "data": results, "summary": _summarize_results(results)}
     except ValueError as e:

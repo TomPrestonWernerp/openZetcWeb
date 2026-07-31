@@ -12,7 +12,10 @@ pytestmark = pytest.mark.asyncio
 
 async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, monkeypatch):
     source = tmp_path / "note.md"
-    source.write_text("# workspace note\n", encoding="utf-8")
+    source.write_bytes(b"# workspace note\n")
+
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "db_1"}
 
     async def fake_ensure_database_supports_documents(slug: str, operation: str) -> None:
         assert slug == "db_1"
@@ -39,6 +42,7 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
     monkeypatch.setattr(knowledge_router, "resolve_workspace_file_path", lambda **_kwargs: source)
     monkeypatch.setattr(knowledge_router.knowledge_base, "file_existed_in_db", fake_file_existed_in_db)
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_same_name_files", fake_get_same_name_files)
@@ -47,6 +51,7 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
     result = await knowledge_router.import_workspace_files(
         knowledge_router.WorkspaceImportRequest(kb_id="db_1", paths=["/note.md"]),
         current_user=SimpleNamespace(id="user_1"),
+        db=None,
     )
 
     assert result["status"] == "success"
@@ -62,6 +67,9 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
 
 
 async def test_import_workspace_files_rejects_directory(tmp_path, monkeypatch):
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "db_1"}
+
     async def fake_ensure_database_supports_documents(slug: str, operation: str) -> None:
         return None
 
@@ -73,12 +81,14 @@ async def test_import_workspace_files_rejects_directory(tmp_path, monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
     monkeypatch.setattr(knowledge_router, "resolve_workspace_file_path", fake_resolve_workspace_file_path)
 
     with pytest.raises(HTTPException) as exc_info:
         await knowledge_router.import_workspace_files(
             knowledge_router.WorkspaceImportRequest(kb_id="db_1", paths=["/folder"]),
             current_user=SimpleNamespace(id="user_1"),
+            db=None,
         )
 
     assert exc_info.value.status_code == 400

@@ -7,14 +7,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from server.utils.auth_middleware import get_db, get_required_user
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.context import filter_config_by_role
 from yuxi.repositories.agent_repository import (
     AgentRepository,
     is_builtin_agent,
     user_can_access_agent,
-    user_can_manage_agent,
 )
 from yuxi.services.agent_run_service import (
     cancel_agent_run_view,
@@ -25,6 +24,7 @@ from yuxi.services.agent_run_service import (
     stream_agent_run_events,
 )
 from yuxi.services.input_message_service import build_chat_input_message
+from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
 from yuxi.storage.postgres.models_business import User
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
@@ -92,7 +92,57 @@ async def _serialize_agent(
         backend_info_cache=backend_info_cache,
     )
     data["config_json"] = _filter_agent_config_json(item.backend_id, data.get("config_json"), user.role)
+    data["access"] = {
+        "can_view": await has_permission(
+            repo.db,
+            user,
+            "agent.view",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ),
+        "can_update": await has_permission(
+            repo.db,
+            user,
+            "agent.update",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ),
+        "can_delete": await has_permission(
+            repo.db,
+            user,
+            "agent.delete",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ),
+        "can_run": await has_permission(
+            repo.db,
+            user,
+            "agent.run",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ),
+        "can_share": await has_permission(
+            repo.db,
+            user,
+            "agent.share",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ),
+    }
     return data
+
+
+async def _can_manage_agent(db: AsyncSession, user: User, item) -> bool:
+    for code in ("agent.update", "agent.delete", "agent.share"):
+        if await has_permission(
+            db,
+            user,
+            code,
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        ):
+            return True
+    return False
 
 
 @agent_router.get("/backends")
@@ -121,7 +171,17 @@ async def list_agents(
 ):
     repo = AgentRepository(db)
     await repo.ensure_default_agent()
-    items = await repo.list_visible(user=current_user, include_subagent_definitions=include_subagents)
+    items = []
+    for item in await repo.list_all(include_subagent_definitions=include_subagents):
+        can_view = user_can_access_agent(current_user, item) and await has_permission(
+            db,
+            current_user,
+            "agent.view",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+        if can_view or await _can_manage_agent(db, current_user, item):
+            items.append(item)
     backend_info_cache: dict[tuple[str, bool, str], dict] = {}
     agents = [await _serialize_agent(repo, item, current_user, backend_info_cache=backend_info_cache) for item in items]
     return {"agents": agents}
@@ -129,6 +189,7 @@ async def list_agents(
 
 @agent_router.get("/default")
 async def get_default_agent(current_user: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)):
+    await require_permission(db, current_user, "agent.view")
     repo = AgentRepository(db)
     item = await repo.ensure_default_agent()
     if not item or not user_can_access_agent(current_user, item):
@@ -140,11 +201,25 @@ async def get_default_agent(current_user: User = Depends(get_required_user), db:
 async def create_agent(
     payload: AgentCreate, current_user: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
 ):
+    await require_permission(db, current_user, "agent.create")
     if not agent_manager.get_agent(payload.backend_id):
         raise HTTPException(status_code=404, detail=f"智能体后端 {payload.backend_id} 不存在")
     if payload.set_default:
         raise HTTPException(status_code=422, detail="默认智能体已固定为内置智能助手")
 
+    requested_share_config = payload.share_config or {
+        "access_level": "user",
+        "department_ids": [],
+        "user_uids": [str(current_user.uid)],
+    }
+    share_config = await validate_share_config(
+        db,
+        current_user,
+        "agent.share",
+        requested_share_config,
+        owner_uid=str(current_user.uid),
+        department_id=current_user.department_id,
+    )
     repo = AgentRepository(db)
     try:
         item = await repo.create(
@@ -155,14 +230,19 @@ async def create_agent(
             icon=payload.icon,
             pics=payload.pics,
             config_json=_filter_agent_config_json(payload.backend_id, payload.config_json, current_user.role),
-            share_config=payload.share_config,
+            share_config=share_config,
             is_default=payload.set_default,
             is_subagent=payload.is_subagent,
             created_by=str(current_user.uid),
             creator=current_user,
+            share_validated=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    item.department_id = current_user.department_id
+    if db is not None:
+        await db.commit()
+        await db.refresh(item)
     return {"agent": await _serialize_agent(repo, item, current_user, include_configurable_items=True)}
 
 
@@ -173,6 +253,13 @@ async def get_agent(agent_id: str, current_user: User = Depends(get_required_use
     item = await repo.get_visible_by_slug(slug=agent_slug, user=current_user, kind="any")
     if not item:
         raise HTTPException(status_code=404, detail="智能体不存在")
+    await require_permission(
+        db,
+        current_user,
+        "agent.view",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
     return {"agent": await _serialize_agent(repo, item, current_user, include_configurable_items=True)}
 
 
@@ -185,11 +272,26 @@ async def update_agent(
 ):
     repo = AgentRepository(db)
     agent_slug = agent_id  # 兼容既有路径参数名；这里实际是 Agent.slug。
-    item = await repo.get_visible_by_slug(slug=agent_slug, user=current_user, kind="any")
+    item = await repo.get_by_slug(agent_slug)
     if not item:
         raise HTTPException(status_code=404, detail="智能体不存在")
-    if not user_can_manage_agent(current_user, item):
-        raise HTTPException(status_code=403, detail="不能编辑非自己创建的智能体")
+    await require_permission(
+        db,
+        current_user,
+        "agent.update",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
+    share_config = payload.share_config
+    if "share_config" in payload.model_fields_set:
+        share_config = await validate_share_config(
+            db,
+            current_user,
+            "agent.share",
+            share_config,
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
 
     try:
         fields_set = payload.model_fields_set
@@ -207,10 +309,11 @@ async def update_agent(
             config_json=_filter_agent_config_json(item.backend_id, payload.config_json, current_user.role)
             if payload.config_json is not None
             else None,
-            share_config=payload.share_config,
+            share_config=share_config,
             is_subagent=payload.is_subagent,
             updated_by=str(current_user.uid),
             updater=current_user,
+            share_validated=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -223,11 +326,16 @@ async def delete_agent(
 ):
     repo = AgentRepository(db)
     agent_slug = agent_id  # 兼容既有路径参数名；这里实际是 Agent.slug。
-    item = await repo.get_visible_by_slug(slug=agent_slug, user=current_user, kind="any")
+    item = await repo.get_by_slug(agent_slug)
     if not item:
         raise HTTPException(status_code=404, detail="智能体不存在")
-    if not user_can_manage_agent(current_user, item):
-        raise HTTPException(status_code=403, detail="不能删除非自己创建的智能体")
+    await require_permission(
+        db,
+        current_user,
+        "agent.delete",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
     if is_builtin_agent(item):
         raise HTTPException(status_code=409, detail="内置智能体不能删除")
     await repo.delete(agent=item)
@@ -237,7 +345,7 @@ async def delete_agent(
 @agent_router.post("/{agent_id}/set_default")
 async def set_agent_default(
     agent_id: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     repo = AgentRepository(db)
@@ -245,6 +353,13 @@ async def set_agent_default(
     item = await repo.get_by_slug(agent_slug)
     if not item:
         raise HTTPException(status_code=404, detail="智能体不存在")
+    await require_permission(
+        db,
+        current_user,
+        "agent.set_default",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
     try:
         updated = await repo.set_default(agent=item, updated_by=str(current_user.uid))
     except ValueError as exc:
@@ -258,6 +373,17 @@ async def create_agent_run(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
+    repo = AgentRepository(db)
+    item = await repo.get_visible_by_slug(slug=payload.agent_slug, user=current_user, kind="any")
+    if not item:
+        raise HTTPException(status_code=404, detail="智能体不存在")
+    await require_permission(
+        db,
+        current_user,
+        "agent.run",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
     input_message = None
     if payload.resume is None and payload.query:
         input_message = build_chat_input_message(payload.query, payload.image_content)

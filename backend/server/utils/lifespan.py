@@ -26,6 +26,10 @@ async def lifespan(app: FastAPI):
         await pg_manager.create_tables()
         await pg_manager.ensure_business_schema()
         await pg_manager.ensure_knowledge_schema()
+        from yuxi.services.rbac_service import ensure_rbac_seeded
+
+        async with pg_manager.get_async_session_context() as session:
+            await ensure_rbac_seeded(session)
     except Exception as e:
         logger.error(f"Failed to initialize database during startup: {e}")
 

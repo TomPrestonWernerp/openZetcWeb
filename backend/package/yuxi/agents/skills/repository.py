@@ -56,6 +56,7 @@ class SkillRepository:
         version: str | None = None,
         content_hash: str | None = None,
         created_by: str | None,
+        department_id: int | None = None,
     ) -> Skill:
         now = utc_now_naive()
         item = Skill(
@@ -72,6 +73,7 @@ class SkillRepository:
             share_config=share_config,
             enabled=enabled,
             created_by=created_by,
+            department_id=department_id,
             updated_by=created_by,
             created_at=now,
             updated_at=now,

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.routers import knowledge_router
-from server.utils.auth_middleware import get_required_user
+from server.utils.auth_middleware import get_db, get_required_user
 from yuxi.storage.postgres.models_business import User
 
 
@@ -13,6 +13,13 @@ def _client(monkeypatch, *, accessible: bool) -> tuple[TestClient, list[tuple[st
 
     async def fake_required_user():
         return User(username="user", uid="user_1", password_hash="x", role="user", department_id=7)
+
+    async def fake_db():
+        return None
+
+    async def fake_get_database_info(kb_id):
+        assert kb_id == "kb_1"
+        return {"kb_id": kb_id, "created_by": "owner", "department_id": 7}
 
     async def fake_check_accessible(user, kb_id):
         assert user == {"uid": "user_1", "role": "user", "department_id": 7}
@@ -26,6 +33,8 @@ def _client(monkeypatch, *, accessible: bool) -> tuple[TestClient, list[tuple[st
     app = FastAPI()
     app.include_router(knowledge_router.knowledge, prefix="/api")
     app.dependency_overrides[get_required_user] = fake_required_user
+    app.dependency_overrides[get_db] = fake_db
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
     monkeypatch.setattr(knowledge_router.knowledge_base, "check_accessible", fake_check_accessible)
     monkeypatch.setattr(knowledge_router.knowledge_base, "aquery", fake_query)
     return TestClient(app), calls

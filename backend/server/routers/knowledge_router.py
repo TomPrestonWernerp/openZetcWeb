@@ -51,6 +51,9 @@ from yuxi.services.knowledge_permission_service import (
     get_user_knowledge_permissions,
     normalize_share_config_for_user,
 )
+from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
+from sqlalchemy.ext.asyncio import AsyncSession
+from server.utils.auth_middleware import get_db
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -215,10 +218,26 @@ async def _has_running_graph_build_task(kb_id: str) -> bool:
 
 
 @knowledge.get("/databases")
-async def get_databases(current_user: User = Depends(get_required_user)):
+async def get_databases(
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
     """获取所有知识库（根据用户权限过滤）"""
     try:
-        result = await knowledge_base.get_databases_by_user(current_user)
+        visible = (await knowledge_base.get_databases_by_user(current_user)).get("databases", [])
+        visible_ids = {item.get("kb_id") for item in visible}
+        result = {"databases": list(visible)}
+        for database in (await knowledge_base.get_databases()).get("databases", []):
+            if database.get("kb_id") in visible_ids:
+                continue
+            if await has_permission(
+                db,
+                current_user,
+                "knowledge.update",
+                owner_uid=database.get("created_by"),
+                department_id=database.get("department_id"),
+            ):
+                result["databases"].append(database)
         permissions = await get_user_knowledge_permissions(current_user)
         for database in result.get("databases", []):
             database["access"] = database_access_summary(current_user, database, permissions)
@@ -240,6 +259,7 @@ async def create_database(
     llm_model_spec: str | None = Body(None),
     share_config: dict | None = Body(None),
     current_user: User = Depends(get_knowledge_create_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """创建知识库"""
     logger.debug(
@@ -285,6 +305,14 @@ async def create_database(
             share_config,
             user=current_user,
             permissions=permissions,
+        )
+        effective_share_config = await validate_share_config(
+            db,
+            current_user,
+            "knowledge.share",
+            effective_share_config,
+            owner_uid=current_user.uid,
+            department_id=current_user.department_id,
         )
 
         database_info = await knowledge_base.create_database(
@@ -450,6 +478,7 @@ async def update_database_info(
     kb_id: str,
     data: UpdateDatabaseRequest,
     current_user: User = Depends(get_knowledge_manage_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """更新知识库信息"""
     logger.debug(
@@ -483,6 +512,15 @@ async def update_database_info(
                 data.share_config,
                 user=current_user,
                 permissions=permissions,
+            )
+            database_info = await knowledge_base.get_database_info(kb_id)
+            effective_share_config = await validate_share_config(
+                db,
+                current_user,
+                "knowledge.share",
+                effective_share_config,
+                owner_uid=database_info.get("created_by") if database_info else None,
+                department_id=database_info.get("department_id") if database_info else None,
             )
 
         database = await knowledge_base.update_database(
@@ -1594,7 +1632,7 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
 # =============================================================================
 
 
-async def _ensure_knowledge_query_access(current_user: User, kb_id: str) -> None:
+async def _ensure_knowledge_query_access(current_user: User, kb_id: str, db: AsyncSession) -> None:
     allowed = await knowledge_base.check_accessible(
         {
             "uid": current_user.uid,
@@ -1605,14 +1643,28 @@ async def _ensure_knowledge_query_access(current_user: User, kb_id: str) -> None
     )
     if not allowed:
         raise HTTPException(status_code=403, detail="Access denied")
+    database = await knowledge_base.get_database_info(kb_id)
+    if database is None:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    await require_permission(
+        db,
+        current_user,
+        "knowledge.query",
+        owner_uid=database.get("created_by"),
+        department_id=database.get("department_id"),
+    )
 
 
 @knowledge.post("/databases/{kb_id}/query")
 async def query_knowledge_base(
-    kb_id: str, query: str = Body(...), meta: dict = Body(...), current_user: User = Depends(get_required_user)
+    kb_id: str,
+    query: str = Body(...),
+    meta: dict = Body(...),
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """查询知识库"""
-    await _ensure_knowledge_query_access(current_user, kb_id)
+    await _ensure_knowledge_query_access(current_user, kb_id, db)
     logger.debug(f"Query knowledge base {kb_id}: {query}")
     try:
         result = await knowledge_base.aquery(query, kb_id=kb_id, **meta)
@@ -1800,12 +1852,13 @@ async def fetch_url(
     url: str = Body(..., embed=True),
     kb_id: str | None = Body(None, embed=True),
     current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     抓取 URL 内容并上传到 MinIO
     """
     if kb_id:
-        await ensure_knowledge_manage(current_user, kb_id)
+        await ensure_knowledge_manage(current_user, kb_id, db, "knowledge.upload")
     logger.debug(f"Fetching URL: {url} for kb_id: {kb_id}")
     try:
         # 1. 下载内容 (包含白名单校验、大小限制、类型检查)
@@ -1871,6 +1924,7 @@ async def fetch_url(
 async def import_workspace_files(
     payload: WorkspaceImportRequest,
     current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """将当前用户工作区文件导入 MinIO，返回与普通文件上传一致的预处理结果。"""
     kb_id = payload.kb_id.strip()
@@ -1880,7 +1934,7 @@ async def import_workspace_files(
     if not paths:
         raise HTTPException(status_code=400, detail="请选择至少一个工作区文件")
 
-    await ensure_knowledge_manage(current_user, kb_id)
+    await ensure_knowledge_manage(current_user, kb_id, db, "knowledge.upload")
     await _ensure_database_supports_documents(kb_id, "文档添加/解析/入库")
 
     bucket_name = MinIOClient.KB_BUCKETS["documents"]
@@ -1939,13 +1993,14 @@ async def upload_file(
     file: UploadFile = File(...),
     kb_id: str | None = Query(None),
     current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """上传文件"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No selected file")
 
     if kb_id:
-        await ensure_knowledge_manage(current_user, kb_id)
+        await ensure_knowledge_manage(current_user, kb_id, db, "knowledge.upload")
         await _ensure_database_supports_documents(kb_id, "文档上传")
 
     logger.debug(f"Received upload file with filename: {file.filename}")

@@ -427,7 +427,6 @@ import {
   FolderOpen,
   ArrowLeft,
   RotateCw,
-  CircleHelp,
   Info,
   Download,
   Trash2,

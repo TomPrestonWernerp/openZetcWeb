@@ -19,7 +19,12 @@
             <RefreshCw :size="16" :class="{ spin: userManagement.refreshing }" />
           </template>
         </a-button>
-        <a-button type="primary" @click="showAddUserModal" class="add-btn lucide-icon-btn">
+        <a-button
+          v-if="userStore.hasPermission('user.create')"
+          type="primary"
+          @click="showAddUserModal"
+          class="add-btn lucide-icon-btn"
+        >
           <template #icon><Plus :size="16" /></template>
           添加用户
         </a-button>
@@ -107,14 +112,24 @@
               </template>
 
               <template #card-more-action-corner>
-                <a-menu>
-                  <a-menu-item key="edit" @click.stop="showEditUserModal(user)">
+                <a-menu
+                  v-if="
+                    userStore.hasPermission('user.update') ||
+                    userStore.hasPermission('user.delete')
+                  "
+                >
+                  <a-menu-item
+                    v-if="userStore.hasPermission('user.update')"
+                    key="edit"
+                    @click.stop="showEditUserModal(user)"
+                  >
                     <span class="lucide-menu-item">
                       <SquarePen :size="14" />
                       <span>编辑用户</span>
                     </span>
                   </a-menu-item>
                   <a-menu-item
+                    v-if="userStore.hasPermission('user.delete')"
                     key="delete"
                     :disabled="isUserDeleteDisabled(user)"
                     :danger="!isUserDeleteDisabled(user)"
@@ -242,8 +257,7 @@
           </a-select>
         </a-form-item>
 
-        <!-- 部门选择器（仅超级管理员可见） -->
-        <a-form-item v-if="userStore.isSuperAdmin" label="部门" class="form-item">
+        <a-form-item v-if="canSelectDepartment" label="部门" class="form-item">
           <a-select v-model:value="userManagement.form.departmentId" placeholder="请选择部门">
             <a-select-option
               v-for="dept in departmentManagement.departments"
@@ -316,6 +330,12 @@ const departmentManagement = reactive({
   departments: []
 })
 
+const canSelectDepartment = computed(() =>
+  userManagement.editMode
+    ? userStore.hasPermission('user.update', 'global')
+    : userStore.hasPermission('user.create', 'global')
+)
+
 const departmentFilterOptions = computed(() => {
   const options = new Map()
 
@@ -373,7 +393,7 @@ const paginatedUsers = computed(() => {
 
 // 获取部门列表
 const fetchDepartments = async () => {
-  if (!userStore.isSuperAdmin) return // 普通管理员不需要获取所有部门列表
+  if (!userStore.hasPermission('department.view')) return
   try {
     const departments = await departmentApi.getDepartments()
     departmentManagement.departments = departments
@@ -585,8 +605,11 @@ const handleUserFormSubmit = async () => {
     if (userManagement.editMode) {
       // 创建更新数据对象
       const updateData = {
-        username: userManagement.form.username.trim(),
-        role: userManagement.form.role
+        username: userManagement.form.username.trim()
+      }
+
+      if (userStore.isSuperAdmin) {
+        updateData.role = userManagement.form.role
       }
 
       // 添加手机号字段
@@ -594,8 +617,7 @@ const handleUserFormSubmit = async () => {
         updateData.phone_number = userManagement.form.phoneNumber
       }
 
-      // 超级管理员可以修改部门
-      if (userStore.isSuperAdmin && userManagement.form.departmentId) {
+      if (userStore.hasPermission('user.update', 'global') && userManagement.form.departmentId) {
         updateData.department_id = userManagement.form.departmentId
       }
 
@@ -611,11 +633,10 @@ const handleUserFormSubmit = async () => {
       const createData = {
         username: userManagement.form.username.trim(),
         password: userManagement.form.password,
-        role: userManagement.form.role
+        role: userStore.isSuperAdmin ? userManagement.form.role : 'user'
       }
 
-      // 超级管理员可以指定部门
-      if (userStore.isSuperAdmin && userManagement.form.departmentId) {
+      if (userStore.hasPermission('user.create', 'global') && userManagement.form.departmentId) {
         createData.department_id = userManagement.form.departmentId
       }
 

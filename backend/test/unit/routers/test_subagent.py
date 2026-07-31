@@ -27,6 +27,8 @@ def _agent(slug: str, *, backend_id: str = "ChatbotAgent", is_subagent: bool = F
         pics=[],
         config_json={},
         share_config={"access_level": "user", "user_uids": ["admin"]},
+        created_by="admin",
+        department_id=1,
         is_default=False,
         is_subagent=is_subagent,
         can_manage=True,
@@ -49,13 +51,19 @@ class _ListRepo:
     get_definition_calls: list[str] = []
 
     def __init__(self, _db):
-        pass
+        self.db = _db
 
     async def ensure_default_agent(self):
         return self.items[0]
 
     async def list_visible(self, *, user, include_subagent_definitions: bool = False):
         del user
+        self.include_subagent_definition_calls.append(include_subagent_definitions)
+        if include_subagent_definitions:
+            return self.items
+        return [item for item in self.items if not item.is_subagent]
+
+    async def list_all(self, *, include_subagent_definitions: bool = False):
         self.include_subagent_definition_calls.append(include_subagent_definitions)
         if include_subagent_definitions:
             return self.items
@@ -153,7 +161,6 @@ def test_normal_user_can_create_agent(monkeypatch):
             "name": "Personal Bot",
             "slug": "personal-bot",
             "backend_id": "ChatbotAgent",
-            "share_config": {"access_level": "global", "department_ids": [], "user_uids": []},
         },
     )
 
@@ -161,9 +168,9 @@ def test_normal_user_can_create_agent(monkeypatch):
     assert _CreateRepo.created_payload["creator"].uid == "user"
     assert _CreateRepo.created_payload["creator"].role == "user"
     assert _CreateRepo.created_payload["share_config"] == {
-        "access_level": "global",
+        "access_level": "user",
         "department_ids": [],
-        "user_uids": [],
+        "user_uids": ["user"],
     }
 
 

@@ -17,7 +17,12 @@
             ><RefreshCw :size="16" :class="{ spin: departmentManagement.refreshing }"
           /></template>
         </a-button>
-        <a-button type="primary" @click="showAddDepartmentModal" class="add-btn lucide-icon-btn">
+        <a-button
+          v-if="userStore.hasPermission('department.create', 'global')"
+          type="primary"
+          @click="showAddDepartmentModal"
+          class="add-btn lucide-icon-btn"
+        >
           <template #icon><Plus :size="16" /></template>
           添加部门
         </a-button>
@@ -55,6 +60,7 @@
                 <a-space>
                   <a-tooltip title="编辑部门">
                     <a-button
+                      v-if="userStore.hasPermission('department.update')"
                       type="text"
                       size="small"
                       @click="showEditDepartmentModal(record)"
@@ -65,6 +71,7 @@
                   </a-tooltip>
                   <a-tooltip title="删除部门">
                     <a-button
+                      v-if="userStore.hasPermission('department.delete', 'global')"
                       type="text"
                       size="small"
                       danger
@@ -178,9 +185,12 @@
 <script setup>
 import { reactive, onMounted, watch } from 'vue'
 import { notification, message, Modal } from 'ant-design-vue'
-import { departmentApi, apiSuperAdminGet } from '@/apis'
+import { apiGet, departmentApi } from '@/apis'
+import { useUserStore } from '@/stores/user'
 import { Plus, RefreshCw, SquarePen, Trash2 } from 'lucide-vue-next'
 import { isPasswordLongEnough, MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
+
+const userStore = useUserStore()
 
 // 表格列定义
 const columns = [
@@ -341,7 +351,7 @@ const checkAdminUid = async () => {
 
   // 检查是否已存在
   try {
-    const result = await apiSuperAdminGet(`/api/auth/check-uid/${uid}`)
+    const result = await apiGet(`/api/auth/check-uid/${uid}`)
     if (!result.is_available) {
       departmentManagement.form.uidError = '该UID已被使用'
     }

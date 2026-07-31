@@ -201,6 +201,7 @@ class KnowledgeBaseManager:
             db_info["share_config"] = row.share_config or DEFAULT_SHARE_CONFIG.copy()
             db_info["additional_params"] = kb_instance.normalize_additional_params(row.additional_params)
             db_info["created_by"] = row.created_by
+            db_info["department_id"] = row.department_id
             all_databases.append(db_info)
         return {"databases": all_databases}
 
@@ -369,7 +370,17 @@ class KnowledgeBaseManager:
 
         kb_instance = self._get_or_create_kb_instance(kb_type)
         kwargs = kb_instance.normalize_additional_params(kwargs)
-        record_fields = {"share_config": share_config, "created_by": created_by}
+        department_id = None
+        if created_by_department_id is not None:
+            try:
+                department_id = int(created_by_department_id)
+            except (TypeError, ValueError):
+                department_id = None
+        record_fields = {
+            "share_config": share_config,
+            "created_by": created_by,
+            "department_id": department_id,
+        }
         db_info = await kb_instance.create_database(
             database_name,
             description,
@@ -543,8 +554,9 @@ class KnowledgeBaseManager:
             db_info["additional_params"] = kb_instance.normalize_additional_params(kb.additional_params)
         else:
             db_info["additional_params"] = normalized_additional_params
-        db_info["share_config"] = kb.share_config or DEFAULT_SHARE_CONFIG.copy()
-        db_info["created_by"] = kb.created_by
+        db_info["share_config"] = getattr(kb, "share_config", None) or DEFAULT_SHARE_CONFIG.copy()
+        db_info["created_by"] = getattr(kb, "created_by", None)
+        db_info["department_id"] = getattr(kb, "department_id", None)
         db_info["mindmap"] = kb.mindmap
         db_info["sample_questions"] = kb.sample_questions or []
         db_info["query_params"] = kb.query_params

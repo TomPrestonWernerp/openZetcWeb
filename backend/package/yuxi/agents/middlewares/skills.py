@@ -349,6 +349,21 @@ class SkillsMiddleware(AgentMiddleware):
 
         # 去重
         unique_mcp_names = list(dict.fromkeys(all_mcp_names))
+        uid = str(getattr(context, "uid", "") or "").strip()
+        if uid and unique_mcp_names:
+            from yuxi.agents.mcp.service import get_accessible_enabled_mcp_servers
+            from yuxi.repositories.user_repository import UserRepository
+            from yuxi.storage.postgres.manager import pg_manager
+
+            async with pg_manager.get_async_session_context() as db:
+                user = await UserRepository().get_by_uid_with_db(db, uid)
+                if user is None:
+                    unique_mcp_names = []
+                else:
+                    accessible = {
+                        server.slug for server in await get_accessible_enabled_mcp_servers(db, user)
+                    }
+                    unique_mcp_names = [name for name in unique_mcp_names if name in accessible]
 
         async def load_mcp_tools(server_name: str) -> list:
             """加载单个 MCP 服务器的工具"""

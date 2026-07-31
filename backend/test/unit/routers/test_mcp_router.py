@@ -46,7 +46,11 @@ def test_update_mcp_server_status(monkeypatch):
 
     class DummyServer:
         def __init__(self, enabled):
+            self.name = "demo-mcp"
             self.enabled = enabled
+            self.created_by_uid = "admin"
+            self.department_id = None
+            self.share_config = {"access_level": "user", "department_ids": [], "user_uids": []}
 
         def to_dict(self):
             return {"name": "demo-mcp", "enabled": self.enabled}
@@ -57,6 +61,10 @@ def test_update_mcp_server_status(monkeypatch):
         captured["updated_by"] = updated_by
         return enabled, DummyServer(enabled)
 
+    async def fake_get_server(_db, name):
+        return DummyServer(True)
+
+    monkeypatch.setattr("server.routers.mcp_router.get_mcp_server", fake_get_server)
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
     client = TestClient(_build_app())
@@ -70,9 +78,13 @@ def test_update_mcp_server_status(monkeypatch):
 
 
 def test_update_mcp_server_status_not_found(monkeypatch):
+    async def fake_get_server(_db, name):
+        return None
+
     async def fake_set_server_enabled(db, name, enabled, updated_by=None):
         raise ValueError(f"Server '{name}' does not exist")
 
+    monkeypatch.setattr("server.routers.mcp_router.get_mcp_server", fake_get_server)
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
     client = TestClient(_build_app())

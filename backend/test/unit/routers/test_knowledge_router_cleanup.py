@@ -67,7 +67,7 @@ async def test_document_file_exists_returns_boolean_for_relative_path(monkeypatc
 
 
 async def test_document_file_exists_route_accepts_filename_with_slashes(monkeypatch):
-    async def fake_admin_user():
+    async def fake_access_user():
         return SimpleNamespace(uid="user_1")
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
@@ -87,7 +87,7 @@ async def test_document_file_exists_route_accepts_filename_with_slashes(monkeypa
 
     app = FastAPI()
     app.include_router(knowledge_router.knowledge, prefix="/api")
-    app.dependency_overrides[knowledge_router.get_admin_user] = fake_admin_user
+    app.dependency_overrides[knowledge_router.get_knowledge_access_user] = fake_access_user
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
@@ -137,6 +137,9 @@ async def test_upload_file_rejects_jsonl_uploads():
 async def test_upload_file_rejects_oversized_file(monkeypatch):
     monkeypatch.setattr(knowledge_router, "MAX_UPLOAD_SIZE_BYTES", 5)
 
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "kb_1"}
+
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
 
@@ -145,11 +148,17 @@ async def test_upload_file_rejects_oversized_file(monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
 
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"123456"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="kb_1", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="kb_1",
+            current_user=SimpleNamespace(uid="user_1"),
+            db=None,
+        )
 
     assert exc_info.value.status_code == 400
     assert "100 MB" in exc_info.value.detail
@@ -157,6 +166,9 @@ async def test_upload_file_rejects_oversized_file(monkeypatch):
 
 async def test_upload_file_invalid_kb_fails_before_read_or_minio(monkeypatch):
     calls = {"read": 0, "upload": 0}
+
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "missing"}
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
@@ -174,13 +186,19 @@ async def test_upload_file_invalid_kb_fails_before_read_or_minio(monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
     monkeypatch.setattr(knowledge_router, "read_upload_with_limit", fake_read_upload_with_limit)
     monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
 
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="missing", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="missing",
+            current_user=SimpleNamespace(uid="user_1"),
+            db=None,
+        )
 
     assert exc_info.value.status_code == 404
     assert calls == {"read": 0, "upload": 0}
@@ -188,6 +206,9 @@ async def test_upload_file_invalid_kb_fails_before_read_or_minio(monkeypatch):
 
 async def test_upload_file_read_only_kb_fails_before_read_or_minio(monkeypatch):
     calls = {"read": 0, "upload": 0}
+
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "readonly"}
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         raise HTTPException(status_code=400, detail="只支持检索，不支持文档上传")
@@ -205,13 +226,19 @@ async def test_upload_file_read_only_kb_fails_before_read_or_minio(monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
     monkeypatch.setattr(knowledge_router, "read_upload_with_limit", fake_read_upload_with_limit)
     monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
 
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="readonly", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="readonly",
+            current_user=SimpleNamespace(uid="user_1"),
+            db=None,
+        )
 
     assert exc_info.value.status_code == 400
     assert calls == {"read": 0, "upload": 0}

@@ -67,13 +67,36 @@ async def get_user_knowledge_permissions(user: User | dict[str, Any]) -> dict[st
     if role == "superadmin":
         return dict(DEFAULT_ROLE_PERMISSIONS["superadmin"])
 
-    department_id = user.get("department_id") if isinstance(user, dict) else user.department_id
-    if department_id is None:
-        return normalize_permission_policy(role)
+    resolved_user = user if isinstance(user, User) else None
+    if resolved_user is None:
+        from yuxi.repositories.user_repository import UserRepository
 
-    department = await DepartmentRepository().get_by_id(int(department_id))
-    stored = department.role_permissions if department else {}
-    return normalize_permission_policy(role, (stored or {}).get(role))
+        uid = str(user.get("uid") or "")
+        resolved_user = await UserRepository().get_by_uid(uid) if uid else None
+    if resolved_user is None:
+        department_id = user.get("department_id") if isinstance(user, dict) else user.department_id
+        if department_id is None:
+            return normalize_permission_policy(role)
+        department = await DepartmentRepository().get_by_id(int(department_id))
+        stored = department.role_permissions if department else {}
+        return normalize_permission_policy(role, (stored or {}).get(role))
+
+    from yuxi.services.rbac_service import get_user_permission_map
+    from yuxi.storage.postgres.manager import pg_manager
+
+    async with pg_manager.get_async_session_context() as db:
+        permission_map = await get_user_permission_map(db, resolved_user)
+    manage_scope = permission_map.get("knowledge.update")
+    share_scope = permission_map.get("knowledge.share")
+    return {
+        "create": "knowledge.create" in permission_map,
+        "manage_own": manage_scope in {"own", "department", "global"},
+        "manage_department": manage_scope in {"department", "global"},
+        "manage_all": manage_scope == "global",
+        "share_users": share_scope in {"own", "department", "global"},
+        "share_department": share_scope in {"department", "global"},
+        "share_global": share_scope == "global",
+    }
 
 
 def allowed_share_levels(permissions: dict[str, bool]) -> list[str]:
@@ -142,12 +165,8 @@ def can_manage_database(
     if not permissions.get("manage_department") or department_id is None:
         return False
 
-    share_config = database.get("share_config") or {}
-    if share_config.get("access_level") != "department":
-        return False
     try:
-        department_ids = {int(value) for value in (share_config.get("department_ids") or [])}
-        return int(department_id) in department_ids
+        return int(database.get("department_id") or 0) == int(department_id)
     except (TypeError, ValueError):
         return False
 

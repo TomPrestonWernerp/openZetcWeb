@@ -134,7 +134,15 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS mindmap_file_ids JSONB",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS mindmap_metadata JSONB",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS sample_questions JSONB",
+            (
+                "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS department_id "
+                "INTEGER REFERENCES departments(id) ON DELETE SET NULL"
+            ),
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
+            (
+                "UPDATE knowledge_bases kb SET department_id = u.department_id "
+                "FROM users u WHERE kb.department_id IS NULL AND kb.created_by = u.uid"
+            ),
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS original_filename VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(64)",
@@ -314,6 +322,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS evaluation_runs ALTER COLUMN kb_id TYPE VARCHAR(80)",
             "CREATE INDEX IF NOT EXISTS idx_kb_type ON knowledge_bases(kb_type)",
             "CREATE INDEX IF NOT EXISTS idx_kb_name ON knowledge_bases(name)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_bases_department_id ON knowledge_bases(department_id)",
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_id ON knowledge_files(kb_id)",
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_filename ON knowledge_files(kb_id, filename)",
             "CREATE INDEX IF NOT EXISTS idx_kf_parent ON knowledge_files(parent_id)",
@@ -381,6 +390,51 @@ class PostgresManager(metaclass=SingletonMeta):
                 "ALTER TABLE IF EXISTS departments ADD COLUMN IF NOT EXISTS role_permissions "
                 "JSONB NOT NULL DEFAULT '{}'::jsonb"
             ),
+            """
+            CREATE TABLE IF NOT EXISTS rbac_permissions (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(100) NOT NULL UNIQUE,
+                domain VARCHAR(40) NOT NULL,
+                action VARCHAR(40) NOT NULL,
+                label VARCHAR(100) NOT NULL,
+                description VARCHAR(255),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rbac_roles (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(100) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                description VARCHAR(255),
+                is_system BOOLEAN NOT NULL DEFAULT FALSE,
+                department_id INTEGER REFERENCES departments(id) ON DELETE CASCADE,
+                created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_rbac_roles_department_name UNIQUE (department_id, name)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rbac_role_permissions (
+                role_id INTEGER NOT NULL REFERENCES rbac_roles(id) ON DELETE CASCADE,
+                permission_id INTEGER NOT NULL REFERENCES rbac_permissions(id) ON DELETE CASCADE,
+                scope VARCHAR(20) NOT NULL DEFAULT 'own',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (role_id, permission_id),
+                CONSTRAINT ck_rbac_role_permissions_scope
+                    CHECK (scope IN ('own', 'department', 'global'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rbac_user_roles (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES rbac_roles(id) ON DELETE CASCADE,
+                assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                assigned_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (user_id, role_id)
+            )
+            """,
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS tool_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS mcp_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS skill_dependencies JSONB DEFAULT '[]'::jsonb",
@@ -392,8 +446,21 @@ class PostgresManager(metaclass=SingletonMeta):
             ),
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS content_hash VARCHAR(128)",
+            (
+                "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS department_id "
+                "INTEGER REFERENCES departments(id) ON DELETE SET NULL"
+            ),
             "ALTER TABLE IF EXISTS conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS env JSONB",
+            (
+                "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS share_config "
+                "JSONB NOT NULL DEFAULT '{}'::jsonb"
+            ),
+            "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS created_by_uid VARCHAR(64)",
+            (
+                "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS department_id "
+                "INTEGER REFERENCES departments(id) ON DELETE SET NULL"
+            ),
             """
             CREATE TABLE IF NOT EXISTS agent_envs (
                 id SERIAL PRIMARY KEY,
@@ -436,7 +503,24 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS backend_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS share_config JSONB NOT NULL DEFAULT '{}'::jsonb",
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS is_subagent BOOLEAN NOT NULL DEFAULT FALSE",
+            (
+                "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS department_id "
+                "INTEGER REFERENCES departments(id) ON DELETE SET NULL"
+            ),
             "ALTER TABLE IF EXISTS user_config ADD COLUMN IF NOT EXISTS enable_memory BOOLEAN NOT NULL DEFAULT FALSE",
+            (
+                "UPDATE agents a SET department_id = u.department_id "
+                "FROM users u WHERE a.department_id IS NULL AND a.created_by = u.uid"
+            ),
+            (
+                "UPDATE skills s SET department_id = u.department_id "
+                "FROM users u WHERE s.department_id IS NULL AND s.created_by = u.uid"
+            ),
+            (
+                "UPDATE mcp_servers m SET created_by_uid = u.uid, department_id = u.department_id "
+                "FROM users u WHERE (m.created_by_uid IS NULL OR m.department_id IS NULL) "
+                "AND m.created_by = u.username"
+            ),
             """
             UPDATE cli_auth_sessions
             SET api_key_id = NULL
@@ -450,6 +534,17 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS ix_agents_backend_id ON agents(backend_id)",
             "CREATE INDEX IF NOT EXISTS ix_agents_is_subagent ON agents(is_subagent)",
             "CREATE INDEX IF NOT EXISTS ix_agents_created_by ON agents(created_by)",
+            "CREATE INDEX IF NOT EXISTS ix_agents_department_id ON agents(department_id)",
+            "CREATE INDEX IF NOT EXISTS ix_skills_department_id ON skills(department_id)",
+            "CREATE INDEX IF NOT EXISTS ix_mcp_servers_created_by_uid ON mcp_servers(created_by_uid)",
+            "CREATE INDEX IF NOT EXISTS ix_mcp_servers_department_id ON mcp_servers(department_id)",
+            "CREATE INDEX IF NOT EXISTS ix_rbac_permissions_domain ON rbac_permissions(domain)",
+            "CREATE INDEX IF NOT EXISTS ix_rbac_roles_department_id ON rbac_roles(department_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_rbac_role_permissions_permission_id "
+                "ON rbac_role_permissions(permission_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_rbac_user_roles_role_id ON rbac_user_roles(role_id)",
             """
             CREATE UNIQUE INDEX IF NOT EXISTS uq_agents_default
             ON agents(is_default)

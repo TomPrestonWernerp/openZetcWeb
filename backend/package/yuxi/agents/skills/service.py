@@ -21,6 +21,7 @@ from yuxi import config as sys_config
 from yuxi.agents.mcp.service import get_enabled_mcp_server_slugs
 from yuxi.agents.skills.repository import SkillRepository
 from yuxi.storage.postgres.models_business import Skill, User
+from yuxi.services.rbac_service import get_user_permission_map, has_permission
 from yuxi.utils.logging_config import logger
 from yuxi.utils.share_config import SHARE_ACCESS_LEVELS, normalize_share_config
 
@@ -370,12 +371,33 @@ async def list_accessible_skills(
 ) -> list[Skill]:
     repo = SkillRepository(db)
     items = await repo.list_enabled() if require_enabled else await repo.list_all()
-    return [item for item in items if user_can_access_skill(user, item, require_enabled=require_enabled)]
+    return [
+        item
+        for item in items
+        if user_can_access_skill(user, item, require_enabled=require_enabled)
+        and await has_permission(
+            db,
+            user,
+            "skill.view",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+    ]
 
 
 async def list_manageable_skills(db: AsyncSession, user: User) -> list[Skill]:
     repo = SkillRepository(db)
-    return [item for item in await repo.list_all() if user_can_manage_skill(user, item)]
+    return [
+        item
+        for item in await repo.list_all()
+        if await has_permission(
+            db,
+            user,
+            "skill.update",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+    ]
 
 
 async def list_visible_skills_for_management(db: AsyncSession, user: User) -> list[Skill]:
@@ -385,7 +407,21 @@ async def list_visible_skills_for_management(db: AsyncSession, user: User) -> li
     for item in await repo.list_all():
         if item.slug in seen:
             continue
-        if user_can_manage_skill(user, item) or (item.enabled and user_can_access_skill(user, item)):
+        can_manage = await has_permission(
+            db,
+            user,
+            "skill.update",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+        can_view = await has_permission(
+            db,
+            user,
+            "skill.view",
+            owner_uid=item.created_by,
+            department_id=item.department_id,
+        )
+        if can_manage or (item.enabled and can_view and user_can_access_skill(user, item)):
             visible.append(item)
             seen.add(item.slug)
     return visible
@@ -414,10 +450,17 @@ async def get_skill_dependency_options(
         all_tools = get_tool_metadata()
         return [{"slug": tool["slug"], "name": tool.get("name", tool["slug"])} for tool in all_tools]
 
+    async def accessible_mcp_slugs() -> list[str]:
+        if db is None:
+            return await get_enabled_mcp_server_slugs(db=db)
+        from yuxi.agents.mcp.service import get_accessible_enabled_mcp_servers
+
+        return [server.slug for server in await get_accessible_enabled_mcp_servers(db, user)]
+
     skill_slugs, tool_list, mcp_names = await asyncio.gather(
         list_skill_slugs(db, user=user),
         asyncio.to_thread(get_tools),
-        get_enabled_mcp_server_slugs(db=db),
+        accessible_mcp_slugs(),
     )
     if slug:
         skill_slugs = [item for item in skill_slugs if item != slug]
@@ -444,6 +487,7 @@ async def _validate_dependencies(
     mcp_dependencies: list[str],
     skill_dependencies: list[str],
     available_skills: dict[str, Skill],
+    available_mcps: set[str],
 ) -> tuple[list[str], list[str], list[str]]:
     tools = normalize_string_list(tool_dependencies)
     mcps = normalize_string_list(mcp_dependencies)
@@ -455,7 +499,6 @@ async def _validate_dependencies(
     if invalid_tools:
         raise ValueError(f"存在无效工具依赖: {', '.join(invalid_tools)}")
 
-    available_mcps = set(await get_enabled_mcp_server_slugs(db=None))
     invalid_mcps = [name for name in mcps if name not in available_mcps]
     if invalid_mcps:
         raise ValueError(f"存在无效 MCP 依赖: {', '.join(invalid_mcps)}")
@@ -488,12 +531,19 @@ async def update_skill_dependencies(
     repo = SkillRepository(db)
     skill_items = await list_accessible_skills(db, operator)
     available_skills = {skill.slug: skill for skill in skill_items}
+    if db is None:
+        available_mcps = set(await get_enabled_mcp_server_slugs(db=db))
+    else:
+        from yuxi.agents.mcp.service import get_accessible_enabled_mcp_servers
+
+        available_mcps = {server.slug for server in await get_accessible_enabled_mcp_servers(db, operator)}
     tools, mcps, skills = await _validate_dependencies(
         parent=item,
         tool_dependencies=tool_dependencies,
         mcp_dependencies=mcp_dependencies,
         skill_dependencies=skill_dependencies,
         available_skills=available_skills,
+        available_mcps=available_mcps,
     )
 
     return await repo.update_dependencies(
@@ -652,16 +702,23 @@ async def _stage_skill_draft_item(
     }
 
 
-def _build_default_share_payload(operator: User) -> dict[str, Any]:
+async def _build_default_share_payload(db: AsyncSession, operator: User) -> dict[str, Any]:
+    permission_map = await get_user_permission_map(db, operator)
+    share_scope = permission_map.get("skill.share")
+    allowed_access_levels = ["user"]
+    if share_scope in {"department", "global"}:
+        allowed_access_levels.insert(0, "department")
+    if share_scope == "global":
+        allowed_access_levels.insert(0, "global")
     default_share_config = normalize_skill_share_config(
         None,
         operator_uid=operator.uid,
         operator_department_id=operator.department_id,
-        allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
+        allowed_access_levels=set(allowed_access_levels),
     )
     return {
         "default_share_config": default_share_config,
-        "allowed_access_levels": get_allowed_skill_access_levels(operator),
+        "allowed_access_levels": allowed_access_levels,
     }
 
 
@@ -820,7 +877,7 @@ async def prepare_skill_upload(
             "created_at": time.time(),
             "expires_at": time.time() + SKILL_DRAFT_TTL_SECONDS,
             "items": [item],
-            **_build_default_share_payload(operator),
+            **(await _build_default_share_payload(db, operator)),
         }
         (draft_dir / "metadata.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data
@@ -869,7 +926,7 @@ async def prepare_remote_skill_install(
             "created_at": time.time(),
             "expires_at": time.time() + SKILL_DRAFT_TTL_SECONDS,
             "items": items,
-            **_build_default_share_payload(operator),
+            **(await _build_default_share_payload(db, operator)),
         }
         (draft_dir / "metadata.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return data
@@ -896,12 +953,19 @@ async def confirm_skill_install_draft(
     if source_type not in {"upload", "remote"}:
         raise ValueError("无效的安装草稿来源")
 
+    permission_map = await get_user_permission_map(db, operator)
+    share_scope = permission_map.get("skill.share")
+    allowed_levels = {"user"}
+    if share_scope in {"department", "global"}:
+        allowed_levels.add("department")
+    if share_scope == "global":
+        allowed_levels.add("global")
     normalized_share_config = normalize_skill_share_config(
         share_config,
         operator_uid=operator.uid,
         operator_department_id=operator.department_id,
         source_type=source_type,
-        allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
+        allowed_access_levels=allowed_levels,
     )
 
     repo = SkillRepository(db)
@@ -961,6 +1025,7 @@ async def confirm_skill_install_draft(
                         share_config=normalized_share_config,
                         enabled=True,
                         created_by=operator.uid,
+                        department_id=operator.department_id,
                     )
                     results.append({"slug": item.slug, "success": True, "skill": item.to_dict()})
                 except Exception:
@@ -1020,21 +1085,47 @@ async def get_skill_or_raise(db: AsyncSession, slug: str) -> Skill:
 
 async def get_accessible_skill_or_raise(db: AsyncSession, user: User, slug: str) -> Skill:
     item = await get_skill_or_raise(db, slug)
-    if not user_can_access_skill(user, item):
+    if not user_can_access_skill(user, item) or not await has_permission(
+        db,
+        user,
+        "skill.view",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    ):
         raise ValueError(f"技能 '{slug}' 不存在或无权访问")
     return item
 
 
 async def get_management_readable_skill_or_raise(db: AsyncSession, user: User, slug: str) -> Skill:
     item = await get_skill_or_raise(db, slug)
-    if not user_can_manage_skill(user, item) and not user_can_access_skill(user, item):
+    can_manage = await has_permission(
+        db,
+        user,
+        "skill.update",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
+    can_view = user_can_access_skill(user, item) and await has_permission(
+        db,
+        user,
+        "skill.view",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    )
+    if not can_manage and not can_view:
         raise ValueError(f"技能 '{slug}' 不存在或无权访问")
     return item
 
 
 async def get_manageable_skill_or_raise(db: AsyncSession, user: User, slug: str) -> Skill:
     item = await get_skill_or_raise(db, slug)
-    if not user_can_manage_skill(user, item):
+    if not await has_permission(
+        db,
+        user,
+        "skill.update",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    ):
         raise ValueError(f"技能 '{slug}' 不存在或无权管理")
     return item
 
@@ -1223,18 +1314,33 @@ async def update_skill_share_config(
 ) -> Skill:
     item = await get_manageable_skill_or_raise(db, operator, slug)
     _ensure_non_builtin(item)
+    permission_map = await get_user_permission_map(db, operator)
+    share_scope = permission_map.get("skill.share")
+    allowed_levels = {"user"}
+    if share_scope in {"department", "global"}:
+        allowed_levels.add("department")
+    if share_scope == "global":
+        allowed_levels.add("global")
     normalized = normalize_skill_share_config(
         share_config,
         operator_uid=operator.uid,
         operator_department_id=operator.department_id,
         source_type=item.source_type,
-        allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
+        allowed_access_levels=allowed_levels,
     )
     return await SkillRepository(db).update_share_config(item, share_config=normalized, updated_by=operator.uid)
 
 
 async def update_skill_enabled(db: AsyncSession, *, slug: str, enabled: bool, operator: User) -> Skill:
-    item = await get_manageable_skill_or_raise(db, operator, slug)
+    item = await get_skill_or_raise(db, slug)
+    if not await has_permission(
+        db,
+        operator,
+        "skill.enable",
+        owner_uid=item.created_by,
+        department_id=item.department_id,
+    ):
+        raise ValueError(f"技能 '{slug}' 不存在或无权启停")
     return await SkillRepository(db).update_enabled(item, enabled=enabled, updated_by=operator.uid)
 
 

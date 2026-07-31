@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -136,6 +137,82 @@ class User(Base):
         self.login_locked_until = None
 
 
+class RBACPermission(Base):
+    """系统维护的原子权限目录。"""
+
+    __tablename__ = "rbac_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(100), nullable=False, unique=True, index=True)
+    domain = Column(String(40), nullable=False, index=True)
+    action = Column(String(40), nullable=False)
+    label = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "domain": self.domain,
+            "action": self.action,
+            "label": self.label,
+            "description": self.description,
+        }
+
+
+class RBACRole(Base):
+    """可分配给用户的系统或自定义角色。"""
+
+    __tablename__ = "rbac_roles"
+    __table_args__ = (UniqueConstraint("department_id", "name", name="uq_rbac_roles_department_name"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(100), nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    is_system = Column(Boolean, nullable=False, default=False)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "name": self.name,
+            "description": self.description,
+            "is_system": bool(self.is_system),
+            "department_id": self.department_id,
+            "created_by_user_id": self.created_by_user_id,
+            "created_at": format_utc_datetime(self.created_at),
+            "updated_at": format_utc_datetime(self.updated_at),
+        }
+
+
+class RBACRolePermission(Base):
+    """角色的权限及数据范围。"""
+
+    __tablename__ = "rbac_role_permissions"
+
+    role_id = Column(Integer, ForeignKey("rbac_roles.id", ondelete="CASCADE"), primary_key=True)
+    permission_id = Column(Integer, ForeignKey("rbac_permissions.id", ondelete="CASCADE"), primary_key=True)
+    scope = Column(String(20), nullable=False, default="own")
+    created_at = Column(DateTime, default=utc_now_naive)
+
+
+class RBACUserRole(Base):
+    """用户与角色的多对多绑定。"""
+
+    __tablename__ = "rbac_user_roles"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role_id = Column(Integer, ForeignKey("rbac_roles.id", ondelete="CASCADE"), primary_key=True)
+    assigned_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    assigned_at = Column(DateTime, default=utc_now_naive)
+
+
 class AgentEnv(Base):
     """用户级 Agent 沙盒环境变量"""
 
@@ -201,6 +278,7 @@ class Agent(Base):
     is_subagent = Column(Boolean, nullable=False, default=False, index=True)
 
     created_by = Column(String(64), nullable=True, index=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True, index=True)
     updated_by = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
@@ -222,6 +300,7 @@ class Agent(Base):
             "is_default": bool(self.is_default),
             "is_subagent": bool(self.is_subagent),
             "created_by": self.created_by,
+            "department_id": self.department_id,
             "updated_by": self.updated_by,
             "created_at": format_utc_datetime(self.created_at),
             "updated_at": format_utc_datetime(self.updated_at),
@@ -249,6 +328,7 @@ class Skill(Base):
     share_config = Column(JSON, nullable=False, default=dict, comment="共享权限配置")
     enabled = Column(Boolean, nullable=False, default=True, comment="是否启用")
     created_by = Column(String(64), nullable=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True, index=True)
     updated_by = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
@@ -269,6 +349,7 @@ class Skill(Base):
             "share_config": self.share_config or {},
             "enabled": bool(self.enabled),
             "created_by": self.created_by,
+            "department_id": self.department_id,
             "updated_by": self.updated_by,
             "created_at": format_utc_datetime(self.created_at),
             "updated_at": format_utc_datetime(self.updated_at),
@@ -546,9 +627,12 @@ class MCPServer(Base):
     # 状态字段
     enabled = Column(Integer, nullable=False, default=1, comment="是否启用：1=是，0=否")
     disabled_tools = Column(JSON, nullable=True, comment="禁用的工具名称列表")
+    share_config = Column(JSON, nullable=False, default=dict, comment="共享权限配置")
 
     # 用户追踪
     created_by = Column(String(100), nullable=False, comment="创建人用户名")
+    created_by_uid = Column(String(64), nullable=True, index=True, comment="创建人 UID")
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True, index=True)
     updated_by = Column(String(100), nullable=False, comment="修改人用户名")
 
     # 时间戳
@@ -573,7 +657,10 @@ class MCPServer(Base):
             "icon": self.icon,
             "enabled": bool(self.enabled),
             "disabled_tools": self.disabled_tools or [],
+            "share_config": self.share_config or {},
             "created_by": self.created_by,
+            "created_by_uid": self.created_by_uid,
+            "department_id": self.department_id,
             "updated_by": self.updated_by,
             "created_at": format_utc_datetime(self.created_at),
             "updated_at": format_utc_datetime(self.updated_at),

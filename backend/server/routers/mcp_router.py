@@ -16,8 +16,9 @@ from yuxi.agents.mcp.service import (
     update_mcp_server,
 )
 from yuxi.storage.postgres.models_business import User
+from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
 from yuxi.utils import logger
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from server.utils.auth_middleware import get_db, get_required_user
 
 mcp = APIRouter(prefix="/system/mcp-servers", tags=["mcp"])
 
@@ -43,6 +44,7 @@ class CreateMcpServerRequest(BaseModel):
     sse_read_timeout: int | None = Field(None, description="SSE 读取超时（秒）")
     tags: list | None = Field(None, description="标签数组")
     icon: str | None = Field(None, description="图标（emoji）")
+    share_config: dict | None = Field(None, description="共享范围")
 
 
 class UpdateMcpServerRequest(BaseModel):
@@ -60,6 +62,7 @@ class UpdateMcpServerRequest(BaseModel):
     sse_read_timeout: int | None = Field(None, description="SSE 读取超时（秒）")
     tags: list | None = Field(None, description="标签数组")
     icon: str | None = Field(None, description="图标（emoji）")
+    share_config: dict | None = Field(None, description="共享范围")
 
 
 class UpdateMcpServerStatusRequest(BaseModel):
@@ -79,6 +82,95 @@ async def get_server_or_404(db: AsyncSession, slug: str):
     return server
 
 
+def _is_mcp_visible(user: User, server) -> bool:
+    if user.role == "superadmin" or getattr(server, "created_by_uid", None) == user.uid:
+        return True
+    share_config = getattr(server, "share_config", None) or {"access_level": "global"}
+    access_level = share_config.get("access_level") or "global"
+    if access_level == "global":
+        return True
+    if access_level == "department":
+        try:
+            return int(user.department_id or 0) in {
+                int(value) for value in share_config.get("department_ids") or []
+            }
+        except (TypeError, ValueError):
+            return False
+    return user.uid in (share_config.get("user_uids") or [])
+
+
+async def _require_mcp_permission(db: AsyncSession, user: User, server, code: str) -> None:
+    if code in {"mcp.view", "mcp.use"} and not _is_mcp_visible(user, server):
+        raise HTTPException(status_code=404, detail="MCP 服务不存在")
+    await require_permission(
+        db,
+        user,
+        code,
+        owner_uid=getattr(server, "created_by_uid", None),
+        department_id=getattr(server, "department_id", None),
+    )
+
+
+async def _serialize_mcp(db: AsyncSession, user: User, server) -> dict:
+    data = server.to_dict()
+    is_visible = _is_mcp_visible(user, server)
+    access = {
+        "can_view": is_visible
+        and await has_permission(
+            db,
+            user,
+            "mcp.view",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+        "can_update": await has_permission(
+            db,
+            user,
+            "mcp.update",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+        "can_delete": await has_permission(
+            db,
+            user,
+            "mcp.delete",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+        "can_use": is_visible
+        and await has_permission(
+            db,
+            user,
+            "mcp.use",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+        "can_test": await has_permission(
+            db,
+            user,
+            "mcp.test",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+        "can_enable": await has_permission(
+            db,
+            user,
+            "mcp.enable",
+            owner_uid=getattr(server, "created_by_uid", None),
+            department_id=getattr(server, "department_id", None),
+        ),
+    }
+    if getattr(server, "created_by_uid", None) is None and user.role == "user":
+        for key in ("can_update", "can_delete", "can_test", "can_enable"):
+            access[key] = False
+    if not access["can_update"]:
+        # MCP 鉴权信息可能包含 API Key、Token 等敏感值。只允许具备编辑权限的用户读取。
+        safe_fields = {"slug", "name", "description", "enabled", "icon", "tags", "access"}
+        data = {key: value for key, value in data.items() if key in safe_fields}
+    data["access"] = access
+    return data
+
+
 # =============================================================================
 # === MCP 服务器 CRUD ===
 # =============================================================================
@@ -91,22 +183,16 @@ async def get_mcp_servers(
 ):
     """获取所有 MCP 服务器配置（普通用户仅获取脱敏的基础信息）"""
     try:
-        servers = await get_all_mcp_servers(db)
-        if current_user.role in ["admin", "superadmin"]:
-            return {"success": True, "data": [s.to_dict() for s in servers]}
-
         data = []
-        for s in servers:
-            data.append(
-                {
-                    "name": getattr(s, "name", ""),
-                    "description": getattr(s, "description", None),
-                    "icon": getattr(s, "icon", None),
-                    "enabled": bool(getattr(s, "enabled", True)),
-                    "tags": getattr(s, "tags", None) or [],
-                }
-            )
+        for server in await get_all_mcp_servers(db):
+            serialized = await _serialize_mcp(db, current_user, server)
+            if serialized["access"]["can_view"] or any(
+                serialized["access"][code] for code in ("can_update", "can_delete", "can_enable")
+            ):
+                data.append(serialized)
         return {"success": True, "data": data}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get MCP servers: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -115,10 +201,11 @@ async def get_mcp_servers(
 @mcp.post("")
 async def create_mcp_server_route(
     request: CreateMcpServerRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """创建新的 MCP 服务器"""
+    await require_permission(db, current_user, "mcp.create")
     # 校验传输类型
     valid_transports = ("sse", "streamable_http", "stdio")
     if request.transport not in valid_transports:
@@ -130,6 +217,19 @@ async def create_mcp_server_route(
     if request.transport == "stdio" and not request.command:
         raise HTTPException(status_code=400, detail="传输类型为 stdio 时，command 必填")
 
+    requested_share_config = request.share_config or {
+        "access_level": "user",
+        "department_ids": [],
+        "user_uids": [current_user.uid],
+    }
+    effective_share_config = await validate_share_config(
+        db,
+        current_user,
+        "mcp.create",
+        requested_share_config,
+        owner_uid=current_user.uid,
+        department_id=current_user.department_id,
+    )
     try:
         server = await create_mcp_server(
             db,
@@ -148,7 +248,12 @@ async def create_mcp_server_route(
             icon=request.icon,
             created_by=current_user.username,
         )
-        return {"success": True, "data": server.to_dict()}
+        server.created_by_uid = current_user.uid
+        server.department_id = current_user.department_id
+        server.share_config = effective_share_config
+        await db.commit()
+        await db.refresh(server)
+        return {"success": True, "data": await _serialize_mcp(db, current_user, server)}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -159,13 +264,14 @@ async def create_mcp_server_route(
 @mcp.get("/{slug}")
 async def get_mcp_server_route(
     slug: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取单个 MCP 服务器配置"""
     try:
         server = await get_server_or_404(db, slug)
-        return {"success": True, "data": server.to_dict()}
+        await _require_mcp_permission(db, current_user, server, "mcp.view")
+        return {"success": True, "data": await _serialize_mcp(db, current_user, server)}
     except HTTPException:
         raise
     except Exception as e:
@@ -177,7 +283,7 @@ async def get_mcp_server_route(
 async def update_mcp_server_route(
     slug: str,
     request: UpdateMcpServerRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """更新 MCP 服务器配置"""
@@ -187,6 +293,8 @@ async def update_mcp_server_route(
         raise HTTPException(status_code=400, detail=f"传输类型必须是 {', '.join(valid_transports)} 之一")
 
     try:
+        server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.update")
         fields_set = request.model_fields_set
         update_kwargs = {}
         if "env" in fields_set:
@@ -209,7 +317,20 @@ async def update_mcp_server_route(
             updated_by=current_user.username,
             **update_kwargs,
         )
-        return {"success": True, "data": server.to_dict()}
+        if "share_config" in fields_set:
+            server.share_config = await validate_share_config(
+                db,
+                current_user,
+                "mcp.update",
+                request.share_config,
+                owner_uid=server.created_by_uid,
+                department_id=server.department_id,
+            )
+            await db.commit()
+            await db.refresh(server)
+        return {"success": True, "data": await _serialize_mcp(db, current_user, server)}
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
@@ -220,13 +341,15 @@ async def update_mcp_server_route(
 @mcp.delete("/{slug}")
 async def delete_mcp_server_route(
     slug: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """删除 MCP 服务器"""
     try:
         # 检查是否为系统内置服务器
         server = await get_mcp_server(db, slug)
+        if server:
+            await _require_mcp_permission(db, current_user, server, "mcp.delete")
         if server and server.created_by == "system":
             raise HTTPException(status_code=403, detail="系统内置的 MCP 服务器无法删除")
 
@@ -249,12 +372,13 @@ async def delete_mcp_server_route(
 @mcp.post("/{slug}/test")
 async def test_mcp_server(
     slug: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """测试 MCP 服务器连接"""
     try:
-        await get_server_or_404(db, slug)
+        server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.test")
 
         try:
             tools = await get_all_mcp_tools(slug)
@@ -276,18 +400,22 @@ async def test_mcp_server(
 async def update_mcp_server_status_route(
     slug: str,
     request: UpdateMcpServerStatusRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """更新 MCP 服务器启用状态"""
     try:
+        server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.enable")
         is_enabled, server = await set_server_enabled(db, slug, request.enabled, current_user.username)
         return {
             "success": True,
             "enabled": is_enabled,
-            "data": server.to_dict(),
+            "data": await _serialize_mcp(db, current_user, server),
             "message": f"MCP '{slug}' 已{'添加' if is_enabled else '移除'}",
         }
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
@@ -303,12 +431,13 @@ async def update_mcp_server_status_route(
 @mcp.get("/{slug}/tools")
 async def get_mcp_server_tools(
     slug: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取 MCP 服务器的工具列表"""
     try:
         server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.view")
         disabled_tools = server.disabled_tools or []
 
         try:
@@ -354,12 +483,13 @@ async def get_mcp_server_tools(
 @mcp.post("/{slug}/tools/refresh")
 async def refresh_mcp_server_tools(
     slug: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """刷新 MCP 服务器的工具列表（清除缓存重新获取）"""
     try:
-        await get_server_or_404(db, slug)
+        server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.test")
 
         try:
             # 获取所有工具（不过滤 disabled_tools）
@@ -396,11 +526,13 @@ async def refresh_mcp_server_tools(
 async def toggle_mcp_server_tool_route(
     slug: str,
     tool_name: str,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """切换单个工具的启用状态"""
     try:
+        server = await get_server_or_404(db, slug)
+        await _require_mcp_permission(db, current_user, server, "mcp.enable")
         enabled, _ = await toggle_tool_enabled(db, slug, tool_name, current_user.username)
         return {
             "success": True,
@@ -408,6 +540,8 @@ async def toggle_mcp_server_tool_route(
             "enabled": enabled,
             "message": f"工具 '{tool_name}' 已{'启用' if enabled else '禁用'}",
         }
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
