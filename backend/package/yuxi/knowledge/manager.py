@@ -544,6 +544,7 @@ class KnowledgeBaseManager:
         else:
             db_info["additional_params"] = normalized_additional_params
         db_info["share_config"] = kb.share_config or DEFAULT_SHARE_CONFIG.copy()
+        db_info["created_by"] = kb.created_by
         db_info["mindmap"] = kb.mindmap
         db_info["sample_questions"] = kb.sample_questions or []
         db_info["query_params"] = kb.query_params

@@ -3,7 +3,6 @@ import { ref, reactive } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { databaseApi, documentApi, queryApi } from '@/apis/knowledge_api'
 import { useTaskerStore } from '@/stores/tasker'
-import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { parseToShanghai } from '@/utils/time'
 import { canSelectFile, isProcessingFile } from '@/utils/knowledge_file_policy'
@@ -11,11 +10,20 @@ import { canSelectFile, isProcessingFile } from '@/utils/knowledge_file_policy'
 export const useDatabaseStore = defineStore('database', () => {
   const router = useRouter()
   const taskerStore = useTaskerStore()
-  const userStore = useUserStore()
 
   // State
   const databases = ref([])
   const database = ref({})
+  const permissions = ref({
+    create: false,
+    manage_own: false,
+    manage_department: false,
+    manage_all: false,
+    share_users: false,
+    share_department: false,
+    share_global: false
+  })
+  const allowedShareLevels = ref(['user'])
   const kbId = ref(null)
   const fileDetailFileId = ref(null)
   const documentFiles = ref([])
@@ -81,13 +89,13 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   // Actions
-  // 管理员获取所有知识库，普通用户获取有权限访问的知识库
+  // 所有用户走同一资源接口，由后端返回可见列表和资源级管理权限。
   async function loadDatabases() {
     state.listLoading = true
     try {
-      const data = userStore.isAdmin
-        ? await databaseApi.getDatabases()
-        : await databaseApi.getAccessibleDatabases()
+      const data = await databaseApi.getDatabases()
+      permissions.value = { ...permissions.value, ...(data?.permissions || {}) }
+      allowedShareLevels.value = data?.allowed_share_levels || ['user']
       const list = data?.databases || []
       databases.value = list.sort((a, b) => {
         const timeA = parseToShanghai(a.created_at)
@@ -147,6 +155,8 @@ export const useDatabaseStore = defineStore('database', () => {
       const data = await databaseApi.getDatabaseInfo(kbIdValue)
       const currentFiles = database.value.files || {}
       database.value = { ...data, files: data?.files || currentFiles }
+      permissions.value = { ...permissions.value, ...(data?.permissions || {}) }
+      allowedShareLevels.value = data?.allowed_share_levels || allowedShareLevels.value
       ensureAutoRefreshForProcessing(data?.files, data?.stats)
 
       // Only load query parameters if explicitly requested or if not loaded yet
@@ -341,7 +351,12 @@ export const useDatabaseStore = defineStore('database', () => {
 
     const nextStatus = options.status ?? fileBrowser.status
     const nextRecursive = options.recursive ?? nextStatus !== 'all'
-    const nextParentId = nextRecursive ? null : (options.parentId ?? fileBrowser.parentId)
+    const hasParentId = Object.prototype.hasOwnProperty.call(options, 'parentId')
+    const nextParentId = nextRecursive
+      ? null
+      : hasParentId
+        ? options.parentId
+        : fileBrowser.parentId
     const nextPathPrefix = nextRecursive ? '' : (options.pathPrefix ?? fileBrowser.pathPrefix)
     const nextPage = Number(options.page ?? fileBrowser.page) || 1
     const nextPageSize = Number(options.pageSize ?? fileBrowser.pageSize) || 100
@@ -747,6 +762,8 @@ export const useDatabaseStore = defineStore('database', () => {
   return {
     databases,
     database,
+    permissions,
+    allowedShareLevels,
     kbId,
     fileDetailFileId,
     documentFiles,

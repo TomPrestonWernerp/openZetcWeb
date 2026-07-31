@@ -26,6 +26,7 @@
       </template>
       <template #actions>
         <a-button
+          v-if="permissions.create"
           type="primary"
           class="lucide-icon-btn"
           :disabled="!kbTypes.length"
@@ -161,6 +162,7 @@
             ref="shareConfigFormRef"
             v-model="shareConfig"
             :auto-select-user-dept="true"
+            :allowed-access-levels="allowedShareLevels"
           />
         </div>
       </div>
@@ -192,6 +194,7 @@
     >
       <template #actions>
         <a-button
+          v-if="permissions.create"
           type="primary"
           size="large"
           class="lucide-icon-btn"
@@ -228,14 +231,14 @@
                 <span>复制 ID</span>
               </span>
             </a-menu-item>
-            <a-menu-item key="edit">
+            <a-menu-item v-if="canManageDatabase(database)" key="edit">
               <span class="lucide-menu-item">
                 <Pencil :size="15" />
                 <span>编辑知识库</span>
               </span>
             </a-menu-item>
-            <a-menu-divider />
-            <a-menu-item key="delete" danger>
+            <a-menu-divider v-if="canManageDatabase(database)" />
+            <a-menu-item v-if="canManageDatabase(database)" key="delete" danger>
               <span class="lucide-menu-item">
                 <Trash2 :size="15" />
                 <span>删除知识库</span>
@@ -254,6 +257,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
+import { useUserStore } from '@/stores/user'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { message, Modal } from 'ant-design-vue'
@@ -275,6 +279,7 @@ const route = useRoute()
 const router = useRouter()
 const configStore = useConfigStore()
 const databaseStore = useDatabaseStore()
+const userStore = useUserStore()
 const {
   chunkPresetSelectOptions: chunkPresetOptions,
   chunkPresetLoading,
@@ -287,7 +292,7 @@ const props = defineProps({
 })
 
 // 使用 store 的状态
-const { databases, state: dbState } = storeToRefs(databaseStore)
+const { databases, permissions, allowedShareLevels, state: dbState } = storeToRefs(databaseStore)
 
 const knowledgeActiveView = 'documents'
 const knowledgeViewItems = [
@@ -319,9 +324,9 @@ const state = reactive({
 })
 
 const createDefaultShareConfig = () => ({
-  access_level: 'global',
+  access_level: allowedShareLevels.value?.[0] || 'user',
   department_ids: [],
-  user_uids: []
+  user_uids: userStore.uid ? [userStore.uid] : []
 })
 
 const shareConfig = ref(createDefaultShareConfig())
@@ -538,6 +543,8 @@ const navigateToDatabase = (database) => {
   router.push({ path: `/extensions/knowledgebase/${database.kb_id}` })
 }
 
+const canManageDatabase = (database) => Boolean(database?.access?.can_manage)
+
 const copyDatabaseId = async (database) => {
   try {
     await navigator.clipboard.writeText(database.kb_id)
@@ -578,6 +585,7 @@ const handleDatabaseAction = (key, database) => {
     return
   }
   if (key === 'edit') {
+    if (!canManageDatabase(database)) return
     router.push({
       path: `/extensions/knowledgebase/${database.kb_id}`,
       query: { action: 'edit' }
@@ -585,9 +593,20 @@ const handleDatabaseAction = (key, database) => {
     return
   }
   if (key === 'delete') {
+    if (!canManageDatabase(database)) return
     deleteDatabase(database)
   }
 }
+
+watch(
+  allowedShareLevels,
+  (levels) => {
+    if (!levels?.includes(shareConfig.value.access_level)) {
+      shareConfig.value = createDefaultShareConfig()
+    }
+  },
+  { deep: true }
+)
 
 watch(
   () => route.path,

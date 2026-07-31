@@ -1,4 +1,14 @@
-import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete, apiRequest } from './base'
+import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './base'
+
+// 知识库权限由后端按“角色策略 + 资源归属”强制校验，不能在客户端按管理员角色提前拦截。
+const apiAdminGet = (url, options = {}, responseType = 'json') =>
+  apiGet(url, options, true, responseType)
+const apiAdminPost = (url, data = {}, options = {}, responseType = 'json') =>
+  apiPost(url, data, options, true, responseType)
+const apiAdminPut = (url, data = {}, options = {}, responseType = 'json') =>
+  apiPut(url, data, options, true, responseType)
+const apiAdminDelete = (url, options = {}, responseType = 'json') =>
+  apiDelete(url, options, true, responseType)
 
 /**
  * 知识库管理API模块

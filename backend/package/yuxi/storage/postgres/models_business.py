@@ -35,6 +35,7 @@ class Department(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False, unique=True, index=True)
     description = Column(String(255), nullable=True)
+    role_permissions = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=utc_now_naive)
 
     # 关联关系
@@ -45,6 +46,7 @@ class Department(Base):
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "role_permissions": self.role_permissions or {},
             "created_at": format_utc_datetime(self.created_at),
         }
 

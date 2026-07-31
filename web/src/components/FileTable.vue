@@ -89,6 +89,7 @@
             </a-dropdown>
 
             <a-button
+              v-if="!props.readOnly"
               type="text"
               @click="toggleSelectionMode"
               title="多选"
@@ -112,6 +113,7 @@
               <div class="overflow-menu-panel" @click.stop>
                 <div class="overflow-actions">
                   <div
+                    v-if="!props.readOnly"
                     class="overflow-action-item"
                     :class="{ 'is-loading': refreshing }"
                     @click="handleRefresh"
@@ -152,7 +154,7 @@
       </template>
 
       <template #before-table>
-        <div class="batch-actions" v-if="isSelectionMode">
+        <div class="batch-actions" v-if="isSelectionMode && !props.readOnly">
           <div class="batch-info">
             <a-checkbox
               :checked="isAllSelected"
@@ -224,7 +226,7 @@
         <div class="file-status-cell">
           <template v-if="!row.is_folder">
             <button
-              v-if="hasStatusAction(row)"
+              v-if="!props.readOnly && hasStatusAction(row)"
               type="button"
               class="file-status-pill file-status-action"
               :disabled="lock"
@@ -255,7 +257,7 @@
       <template #row-actions="{ row }">
         <div class="table-row-actions">
           <a-popover
-            v-if="!row.is_virtual_folder"
+            v-if="!row.is_virtual_folder && (!props.readOnly || !row.is_folder)"
             placement="bottomRight"
             trigger="click"
             overlayClassName="file-action-popover"
@@ -263,7 +265,7 @@
           >
             <template #content>
               <div class="file-action-list">
-                <template v-if="row.is_folder">
+                <template v-if="row.is_folder && !props.readOnly">
                   <a-button type="text" block @click="showCreateFolderModal(row.file_id)">
                     <template #icon><component :is="h(FolderPlus)" size="14" /></template>
                     新建子文件夹
@@ -286,7 +288,7 @@
 
                   <!-- Parse Action -->
                   <a-button
-                    v-if="canParseFile(row)"
+                    v-if="!props.readOnly && canParseFile(row)"
                     type="text"
                     block
                     @click="handleParseFile(row)"
@@ -298,7 +300,7 @@
 
                   <!-- Index Action -->
                   <a-button
-                    v-if="getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
+                    v-if="!props.readOnly && getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
                     type="text"
                     block
                     @click="handleIndexFile(row)"
@@ -310,7 +312,7 @@
 
                   <!-- Reindex Action -->
                   <a-button
-                    v-if="canReindexFile(row)"
+                    v-if="!props.readOnly && canReindexFile(row)"
                     type="text"
                     block
                     @click="handleReindexFile(row)"
@@ -321,6 +323,7 @@
                   </a-button>
 
                   <a-button
+                    v-if="!props.readOnly"
                     type="text"
                     block
                     danger
@@ -380,6 +383,13 @@ import {
   Filter,
   MoreHorizontal
 } from 'lucide-vue-next'
+
+const props = defineProps({
+  readOnly: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const store = useDatabaseStore()
 
@@ -647,6 +657,7 @@ const emptyText = computed(() => {
 
 // 计算是否可以批量删除
 const canBatchDelete = computed(() => {
+  if (props.readOnly) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return canSelectFile(file, lock.value)
@@ -655,6 +666,7 @@ const canBatchDelete = computed(() => {
 
 // 计算是否可以批量解析
 const canBatchParse = computed(() => {
+  if (props.readOnly) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canParseFile(file)
@@ -663,6 +675,7 @@ const canBatchParse = computed(() => {
 
 // 计算是否可以批量入库
 const canBatchIndex = computed(() => {
+  if (props.readOnly) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canIndexFile(file)
@@ -699,7 +712,7 @@ const onSelectChange = (keys, selectedRows) => {
 }
 
 const getCheckboxProps = (record) => ({
-  disabled: !canSelectFile(record, lock.value)
+  disabled: props.readOnly || !canSelectFile(record, lock.value)
 })
 
 const tableSelection = computed(() => {

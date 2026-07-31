@@ -57,6 +57,15 @@
           </div>
           <div
             class="sider-item"
+            :class="{ activesec: activeTab === 'rolePermissions' }"
+            @click="activeTab = 'rolePermissions'"
+            v-if="userStore.isAdmin"
+          >
+            <ShieldCheck class="icon" :size="18" />
+            <span>角色权限</span>
+          </div>
+          <div
+            class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
             v-if="userStore.isSuperAdmin"
@@ -73,39 +82,6 @@
             <SquareTerminal class="icon" :size="18" />
             <span>环境变量</span>
           </div>
-        </div>
-
-        <div v-if="showStarCard" class="settings-star-card">
-          <div class="star-card-header">
-            <div class="star-card-badge">
-              <Star :size="12" />
-              <span>支持项目</span>
-            </div>
-            <button
-              class="star-card-close lucide-icon-btn"
-              @click="dismissStarCard"
-              aria-label="关闭 Star 提示"
-            >
-              <X :size="14" />
-            </button>
-          </div>
-          <p class="star-card-title">给 Yuxi 点个 Star</p>
-          <p class="star-card-description">
-            如果这个项目帮到了你，欢迎去 GitHub 点亮一个 Star，让更多人看到它。
-          </p>
-          <a
-            class="star-card-link"
-            :href="projectRepoUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <img
-              class="star-card-link-image"
-              src="https://img.shields.io/github/stars/xerrors/Yuxi?label=Yuxi&style=social"
-              alt="GitHub stars for Yuxi"
-            />
-            <ExternalLink :size="13" />
-          </a>
         </div>
       </div>
 
@@ -153,6 +129,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: activeTab === 'rolePermissions' }"
+          @click="activeTab = 'rolePermissions'"
+          v-if="userStore.isAdmin"
+        >
+          角色权限
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
           v-if="userStore.isSuperAdmin"
@@ -184,6 +168,10 @@
             <UserManagementComponent />
           </div>
 
+          <div v-show="activeTab === 'rolePermissions'" v-if="userStore.isAdmin">
+            <RolePermissionManagementComponent />
+          </div>
+
           <div v-show="activeTab === 'department'" v-if="userStore.isSuperAdmin">
             <DepartmentManagementComponent />
           </div>
@@ -194,17 +182,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import {
   CircleUser,
-  ExternalLink,
   Settings,
   Key,
-  Star,
   SquareTerminal,
   User,
   Users,
+  ShieldCheck,
   X
 } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
@@ -213,6 +200,7 @@ import BasicSettingsSection from '@/components/BasicSettingsSection.vue'
 import ApiKeyManagementComponent from '@/components/ApiKeyManagementComponent.vue'
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
+import RolePermissionManagementComponent from '@/components/RolePermissionManagementComponent.vue'
 
 const props = defineProps({
   visible: {
@@ -229,10 +217,6 @@ const emit = defineEmits(['update:visible', 'close'])
 
 const userStore = useUserStore()
 const activeTab = ref('account')
-const showStarCard = ref(true)
-
-const STAR_CARD_STORAGE_KEY = 'yuxi-settings-star-card-dismissed'
-const projectRepoUrl = 'https://github.com/xerrors/Yuxi'
 
 const visible = computed({
   get: () => props.visible,
@@ -242,7 +226,7 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'user')
+  if (userStore.isAdmin) tabs.push('base', 'user', 'rolePermissions')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })
@@ -258,15 +242,6 @@ const setActiveTab = (preferredTab) => {
 const handleClose = () => {
   emit('close')
 }
-
-const dismissStarCard = () => {
-  showStarCard.value = false
-  localStorage.setItem(STAR_CARD_STORAGE_KEY, 'true')
-}
-
-onMounted(() => {
-  showStarCard.value = localStorage.getItem(STAR_CARD_STORAGE_KEY) !== 'true'
-})
 
 watch(
   () => [props.visible, props.initialTab],

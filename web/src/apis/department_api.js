@@ -4,6 +4,7 @@
 
 import {
   apiAdminGet,
+  apiAdminPut,
   apiSuperAdminGet,
   apiSuperAdminPost,
   apiSuperAdminPut,
@@ -61,10 +62,23 @@ export const deleteDepartment = (departmentId) => {
   return apiSuperAdminDelete(`${BASE_URL}/${departmentId}`)
 }
 
+export const getRolePermissions = (departmentId) => {
+  return apiAdminGet(`${BASE_URL}/${departmentId}/role-permissions`)
+}
+
+export const updateRolePermissions = (departmentId, role, permissions) => {
+  return apiAdminPut(`${BASE_URL}/${departmentId}/role-permissions`, {
+    role,
+    permissions
+  })
+}
+
 export const departmentApi = {
   getDepartments,
   getDepartment,
   createDepartment,
   updateDepartment,
-  deleteDepartment
+  deleteDepartment,
+  getRolePermissions,
+  updateRolePermissions
 }

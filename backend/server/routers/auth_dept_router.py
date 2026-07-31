@@ -17,6 +17,11 @@ from server.utils.auth_middleware import get_superadmin_user, get_admin_user, ge
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.operation_log_service import log_operation
 from yuxi.services.user_identity_service import is_valid_phone_number
+from yuxi.services.knowledge_permission_service import (
+    KNOWLEDGE_PERMISSION_KEYS,
+    normalize_department_role_permissions,
+    normalize_permission_policy,
+)
 
 # 创建路由器
 department = APIRouter(prefix="/departments", tags=["department"])
@@ -55,9 +60,95 @@ class DepartmentResponse(BaseModel):
     user_count: int = 0
 
 
+class KnowledgePermissionPolicy(BaseModel):
+    create: bool
+    manage_own: bool
+    manage_department: bool
+    manage_all: bool
+    share_users: bool
+    share_department: bool
+    share_global: bool
+
+
+class DepartmentRolePermissionsUpdate(BaseModel):
+    role: str
+    permissions: KnowledgePermissionPolicy
+
+
 # =============================================================================
 # === 部门管理路由 ===
 # =============================================================================
+
+
+def _ensure_role_permission_scope(current_user: User, department_id: int, role: str | None = None) -> None:
+    if current_user.role == "superadmin":
+        return
+    if current_user.role != "admin" or int(current_user.department_id or 0) != int(department_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权配置该部门的角色权限")
+    if role is not None and role != "user":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="部门管理员只能配置普通用户权限")
+
+
+@department.get("/{department_id}/role-permissions")
+async def get_department_role_permissions(
+    department_id: int,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取部门知识库角色策略。部门管理员仅可查看本部门。"""
+    _ensure_role_permission_scope(current_user, department_id)
+    result = await db.execute(select(Department).where(Department.id == department_id))
+    target = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="部门不存在")
+
+    policies = normalize_department_role_permissions(target.role_permissions)
+    editable_roles = ["admin", "user"] if current_user.role == "superadmin" else ["user"]
+    return {
+        "department_id": target.id,
+        "department_name": target.name,
+        "permissions": policies,
+        "permission_keys": list(KNOWLEDGE_PERMISSION_KEYS),
+        "editable_roles": editable_roles,
+    }
+
+
+@department.put("/{department_id}/role-permissions")
+async def update_department_role_permissions(
+    department_id: int,
+    payload: DepartmentRolePermissionsUpdate,
+    request: Request,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新部门角色知识库策略。后端负责限制可编辑角色，前端隐藏不作为安全边界。"""
+    if payload.role not in {"admin", "user"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅支持管理员和普通用户角色")
+    _ensure_role_permission_scope(current_user, department_id, payload.role)
+
+    result = await db.execute(select(Department).where(Department.id == department_id))
+    target = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="部门不存在")
+
+    policies = normalize_department_role_permissions(target.role_permissions)
+    policies[payload.role] = normalize_permission_policy(payload.role, payload.permissions.model_dump())
+    target.role_permissions = policies
+    await db.commit()
+    await db.refresh(target)
+    await log_operation(
+        db,
+        current_user.id,
+        "更新角色权限",
+        f"更新部门 {target.name} 的 {payload.role} 知识库权限",
+        request,
+    )
+    return {
+        "department_id": target.id,
+        "department_name": target.name,
+        "permissions": normalize_department_role_permissions(target.role_permissions),
+        "editable_roles": ["admin", "user"] if current_user.role == "superadmin" else ["user"],
+    }
 
 
 @department.get("", response_model=list[DepartmentResponse])
