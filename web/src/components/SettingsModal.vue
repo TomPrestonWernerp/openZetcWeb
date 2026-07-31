@@ -57,6 +57,15 @@
           </div>
           <div
             class="sider-item"
+            :class="{ activesec: activeTab === 'rolePermissions' }"
+            @click="activeTab = 'rolePermissions'"
+            v-if="userStore.isAdmin"
+          >
+            <ShieldCheck class="icon" :size="18" />
+            <span>角色权限</span>
+          </div>
+          <div
+            class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
             v-if="userStore.isSuperAdmin"
@@ -120,6 +129,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: activeTab === 'rolePermissions' }"
+          @click="activeTab = 'rolePermissions'"
+          v-if="userStore.isAdmin"
+        >
+          角色权限
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
           v-if="userStore.isSuperAdmin"
@@ -151,6 +168,10 @@
             <UserManagementComponent />
           </div>
 
+          <div v-show="activeTab === 'rolePermissions'" v-if="userStore.isAdmin">
+            <RolePermissionManagementComponent />
+          </div>
+
           <div v-show="activeTab === 'department'" v-if="userStore.isSuperAdmin">
             <DepartmentManagementComponent />
           </div>
@@ -170,6 +191,7 @@ import {
   SquareTerminal,
   User,
   Users,
+  ShieldCheck,
   X
 } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
@@ -178,6 +200,7 @@ import BasicSettingsSection from '@/components/BasicSettingsSection.vue'
 import ApiKeyManagementComponent from '@/components/ApiKeyManagementComponent.vue'
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
+import RolePermissionManagementComponent from '@/components/RolePermissionManagementComponent.vue'
 
 const props = defineProps({
   visible: {
@@ -203,7 +226,7 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'user')
+  if (userStore.isAdmin) tabs.push('base', 'user', 'rolePermissions')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })

@@ -46,6 +46,7 @@
               <span>复制 ID</span>
             </button>
             <button
+              v-if="canManage"
               type="button"
               class="lucide-icon-btn extension-panel-action extension-panel-action-primary"
               @click="showEditModal"
@@ -82,6 +83,7 @@
               <div class="file-info-title">
                 <div class="file-info-title-row">
                   <button
+                    v-if="canManage"
                     type="button"
                     class="lucide-icon-btn extension-panel-action extension-panel-action-primary"
                     @click="showAddFilesModal()"
@@ -90,6 +92,7 @@
                     <span>上传</span>
                   </button>
                   <button
+                    v-if="canManage"
                     type="button"
                     class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
                     @click="showCreateFolderModal"
@@ -101,7 +104,7 @@
               </div>
               <div class="file-panel-status">
                 <button
-                  v-if="pendingParseCount > 0"
+                  v-if="canManage && pendingParseCount > 0"
                   type="button"
                   class="file-stat-card file-stat-action file-stat-summary"
                   :disabled="store.state.chunkLoading"
@@ -114,7 +117,7 @@
                   </div>
                 </button>
                 <button
-                  v-if="pendingIndexCount > 0"
+                  v-if="canManage && pendingIndexCount > 0"
                   type="button"
                   class="file-stat-card file-stat-action file-stat-summary"
                   :disabled="store.state.chunkLoading"
@@ -141,6 +144,7 @@
                   </div>
                 </div>
                 <button
+                  v-if="canManage"
                   type="button"
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
@@ -157,6 +161,7 @@
                   </div>
                 </button>
                 <button
+                  v-if="canManage"
                   type="button"
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
@@ -174,7 +179,7 @@
                 </button>
               </div>
             </div>
-            <FileTable ref="fileTableRef" />
+            <FileTable ref="fileTableRef" :read-only="!canManage" />
           </div>
 
           <div v-show="activeTab === 'query'" class="tab-panel query-config-panel">
@@ -182,7 +187,7 @@
               <div class="query-test-pane">
                 <QuerySection ref="querySectionRef" :visible="true" @toggle-visible="() => {}" />
               </div>
-              <aside class="query-config-pane" aria-label="检索配置">
+              <aside v-if="canManage" class="query-config-pane" aria-label="检索配置">
                 <div class="search-config-wrapper">
                   <div class="search-config-header">
                     <div>
@@ -344,6 +349,7 @@
               ref="shareConfigFormRef"
               :model-value="database.share_config"
               :auto-select-user-dept="true"
+              :allowed-access-levels="database.allowed_share_levels || ['user']"
             />
           </a-form-item-rest>
         </a-form-item>
@@ -435,6 +441,7 @@ const isConnector = computed(
 )
 const isEvaluationSupported = computed(() => isMilvus.value)
 const kbTypeIcon = computed(() => getKbTypeIcon(kbType.value || 'milvus'))
+const canManage = computed(() => Boolean(database.value?.access?.can_manage))
 
 const databaseSubtitle = computed(() => {
   const typeLabel = getKbTypeLabel(kbType.value || 'milvus')
@@ -462,7 +469,15 @@ const tabs = computed(() => {
   return [{ key: 'query', label: '检索测试', icon: Search }]
 })
 
-const visibleTabs = computed(() => tabs.value)
+const visibleTabs = computed(() => {
+  if (!canManage.value) {
+    return tabs.value.filter((tab) => ['filetable', 'query'].includes(tab.key))
+  }
+  if (!userStore.isAdmin) {
+    return tabs.value.filter((tab) => !['evaluation', 'benchmarks'].includes(tab.key))
+  }
+  return tabs.value
+})
 const activeTab = ref('filetable')
 
 watch(
@@ -752,7 +767,7 @@ const fileList = computed(() => {
   return (store.documentFiles || []).map((f) => f.filename).filter(Boolean)
 })
 
-const canEditShareConfig = computed(() => userStore.isSuperAdmin || userStore.isAdmin)
+const canEditShareConfig = computed(() => canManage.value)
 
 const shareConfigDisplay = computed(() => {
   const shareConfig = database.value?.share_config || { access_level: 'global' }
@@ -811,6 +826,10 @@ const loadUsers = async () => {
 }
 
 const showEditModal = () => {
+  if (!canManage.value) {
+    message.warning('该知识库为只读共享资源')
+    return
+  }
   editForm.name = database.value.name || ''
   editForm.description = database.value.description || ''
   editForm.auto_generate_questions =
@@ -829,7 +848,7 @@ const showEditModal = () => {
 watch(
   () => [route.query.action, detailLoading.value, isCurrentDatabaseLoaded.value],
   ([action, loading, loaded]) => {
-    if (action !== 'edit' || loading || !loaded) return
+    if (action !== 'edit' || loading || !loaded || !canManage.value) return
     showEditModal()
     router.replace({ path: route.path, query: { ...route.query, action: undefined } })
   },
