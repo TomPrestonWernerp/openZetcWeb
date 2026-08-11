@@ -66,6 +66,15 @@
           </div>
           <div
             class="sider-item"
+            :class="{ activesec: activeTab === 'resourceReview' }"
+            @click="activeTab = 'resourceReview'"
+            v-if="userStore.canReviewResourceSubmissions"
+          >
+            <ClipboardCheck class="icon" :size="18" />
+            <span>资源审核</span>
+          </div>
+          <div
+            class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
             v-if="userStore.canManageDepartments"
@@ -137,6 +146,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: activeTab === 'resourceReview' }"
+          @click="activeTab = 'resourceReview'"
+          v-if="userStore.canReviewResourceSubmissions"
+        >
+          资源审核
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
           v-if="userStore.canManageDepartments"
@@ -172,6 +189,10 @@
             <RolePermissionManagementComponent />
           </div>
 
+          <div v-if="activeTab === 'resourceReview' && userStore.canReviewResourceSubmissions">
+            <ResourceSubmissionReviewComponent />
+          </div>
+
           <div
             v-show="activeTab === 'department'"
             v-if="userStore.canManageDepartments"
@@ -195,6 +216,7 @@ import {
   User,
   Users,
   ShieldCheck,
+  ClipboardCheck,
   X
 } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
@@ -204,6 +226,7 @@ import ApiKeyManagementComponent from '@/components/ApiKeyManagementComponent.vu
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
 import RolePermissionManagementComponent from '@/components/RolePermissionManagementComponent.vue'
+import ResourceSubmissionReviewComponent from '@/components/ResourceSubmissionReviewComponent.vue'
 
 const props = defineProps({
   visible: {
@@ -232,6 +255,7 @@ const availableTabs = computed(() => {
   if (userStore.isAdmin) tabs.push('base')
   if (userStore.canManageUsers) tabs.push('user')
   if (userStore.canManageAccess) tabs.push('rolePermissions')
+  if (userStore.canReviewResourceSubmissions) tabs.push('resourceReview')
   if (userStore.canManageDepartments) tabs.push('department')
   return tabs
 })

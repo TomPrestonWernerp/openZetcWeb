@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -708,6 +709,59 @@ class MCPServer(Base):
         if self.disabled_tools:
             config["disabled_tools"] = self.disabled_tools
         return config
+
+
+class ResourceSubmission(Base):
+    """从 openZetcX 本地客户端提交、由部门管理员审核的公共资源投稿。"""
+
+    __tablename__ = "resource_submissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    submission_id = Column(String(64), nullable=False, unique=True, index=True)
+    resource_type = Column(String(16), nullable=False, index=True, comment="agent/skill/mcp")
+    slug = Column(String(128), nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    manifest = Column(JSON, nullable=False, default=dict)
+    package_filename = Column(String(255), nullable=True)
+    package_data = Column(LargeBinary, nullable=True)
+    submitted_by_uid = Column(String(64), nullable=False, index=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=False, index=True)
+    reviewed_by_uid = Column(String(64), nullable=True, index=True)
+    review_comment = Column(Text, nullable=True)
+    published_resource_id = Column(Integer, nullable=True)
+    published_slug = Column(String(128), nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_resource_submissions_review_queue", "department_id", "status", "created_at"),
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "submission_id": self.submission_id,
+            "resource_type": self.resource_type,
+            "slug": self.slug,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "manifest": self.manifest or {},
+            "package_filename": self.package_filename,
+            "has_package": bool(self.package_data),
+            "submitted_by_uid": self.submitted_by_uid,
+            "department_id": self.department_id,
+            "reviewed_by_uid": self.reviewed_by_uid,
+            "review_comment": self.review_comment,
+            "published_resource_id": self.published_resource_id,
+            "published_slug": self.published_slug,
+            "created_at": format_utc_datetime(self.created_at),
+            "updated_at": format_utc_datetime(self.updated_at),
+            "reviewed_at": format_utc_datetime(self.reviewed_at),
+        }
 
 
 class ModelProvider(Base):

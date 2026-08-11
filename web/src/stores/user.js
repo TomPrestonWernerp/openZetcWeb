@@ -53,6 +53,9 @@ export const useUserStore = defineStore('user', () => {
           permissions.value['department.delete']
       )
   )
+  const canReviewResourceSubmissions = computed(
+    () => isSuperAdmin.value || hasPermission('resource_submission.review', 'department')
+  )
 
   function hasPermission(code, minimumScope = 'own') {
     const ranks = { own: 1, department: 2, global: 3 }
@@ -450,6 +453,7 @@ export const useUserStore = defineStore('user', () => {
     canManageUsers,
     canManageDepartments,
     canManageAccess,
+    canReviewResourceSubmissions,
 
     // 方法
     login,

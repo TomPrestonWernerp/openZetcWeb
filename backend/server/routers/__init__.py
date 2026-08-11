@@ -13,6 +13,7 @@ from server.routers.mcp_router import mcp
 from server.routers.mention_router import mention_router
 from server.routers.model_provider_router import model_providers
 from server.routers.rbac_router import rbac
+from server.routers.resource_submission_router import resource_submissions
 from server.routers.skill_router import skills, user_skills
 from server.routers.system_router import system
 from server.routers.system_task_router import tasks
@@ -35,6 +36,7 @@ router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
 router.include_router(dashboard)  # /api/dashboard/* 仪表盘聚合数据
 router.include_router(department)  # /api/departments/* 部门与权限相关数据
 router.include_router(rbac)  # /api/rbac/* 统一角色、权限与人员角色绑定
+router.include_router(resource_submissions)  # /api/resource-submissions/* 本地资源投稿与部门审核
 router.include_router(tasks)  # /api/tasks/* 后台任务查询与管理
 router.include_router(mcp)  # /api/system/mcp-servers/* MCP 服务管理
 router.include_router(model_providers)  # /api/system/model-providers/* 独立模型配置

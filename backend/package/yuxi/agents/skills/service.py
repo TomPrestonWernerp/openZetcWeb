@@ -944,6 +944,9 @@ async def confirm_skill_install_draft(
     draft_id: str,
     share_config: dict | None,
     operator: User,
+    created_by: str | None = None,
+    department_id: int | None = None,
+    share_validated: bool = False,
 ) -> list[dict[str, Any]]:
     draft_dir, data = _load_skill_draft(draft_id)
     if data.get("created_by") != operator.uid and operator.role not in ADMIN_ROLES:
@@ -958,12 +961,14 @@ async def confirm_skill_install_draft(
     allowed_levels = {"user"}
     if share_scope in {"department", "global"}:
         allowed_levels.add("department")
-    if share_scope == "global":
+    if share_scope == "global" or share_validated:
         allowed_levels.add("global")
+    effective_created_by = created_by or operator.uid
+    effective_department_id = department_id if department_id is not None else operator.department_id
     normalized_share_config = normalize_skill_share_config(
         share_config,
-        operator_uid=operator.uid,
-        operator_department_id=operator.department_id,
+        operator_uid=effective_created_by,
+        operator_department_id=effective_department_id,
         source_type=source_type,
         allowed_access_levels=allowed_levels,
     )
@@ -1024,8 +1029,8 @@ async def confirm_skill_install_draft(
                         dir_path=(Path("skills") / slug).as_posix(),
                         share_config=normalized_share_config,
                         enabled=True,
-                        created_by=operator.uid,
-                        department_id=operator.department_id,
+                        created_by=effective_created_by,
+                        department_id=effective_department_id,
                     )
                     results.append({"slug": item.slug, "success": True, "skill": item.to_dict()})
                 except Exception:
