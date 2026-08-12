@@ -76,6 +76,7 @@ PERMISSION_DEFINITIONS = (
     _permission("mcp", "use", "使用 MCP", "允许智能体调用 MCP 工具。"),
     _permission("mcp", "test", "测试 MCP", "测试连接并刷新工具列表。"),
     _permission("mcp", "enable", "启停 MCP", "启用或停用 MCP 服务和工具。"),
+    _permission("mcp", "share", "共享 MCP", "调整 MCP 服务共享范围。"),
     _permission("resource_submission", "submit", "提交公共资源", "将本地 Agent、Skill 或 MCP 提交到部门审核队列。"),
     _permission("resource_submission", "review", "审核公共资源", "审核本部门用户提交的资源并决定是否公开。"),
 )

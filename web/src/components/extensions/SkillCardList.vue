@@ -1,6 +1,9 @@
 <template>
   <div class="skill-cards-page extension-page-root">
     <PageShoulder search-placeholder="搜索技能..." v-model:search="searchQuery">
+      <template #filters>
+        <ResourceScopeSelect v-model="scopeFilter" />
+      </template>
       <template #actions>
         <template v-if="!isBatchDeleteMode">
           <a-button
@@ -104,6 +107,7 @@
               :title="formatExtensionCardTitle(skill.name)"
               :description="skill.description || '暂无描述'"
               :default-icon="BookMarkedIcon"
+              :tags="skillScopeTags(skill)"
               @click="handleCardClick(skill)"
               :class="{
                 'card-clickable-select': isBatchDeleteMode && !skill.isRecommendation,
@@ -611,9 +615,16 @@ import { skillApi } from '@/apis/skill_api'
 import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
+import ResourceScopeSelect from './ResourceScopeSelect.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
+import {
+  RESOURCE_SCOPE_OPTIONS,
+  getResourceScope,
+  getResourceScopeMeta,
+  matchesResourceScope
+} from '@/utils/resourceScope'
 
 const BookMarkedIcon = BookMarked
 const RECOMMENDED_SKILLS = [
@@ -666,6 +677,7 @@ const importing = ref(false)
 const listingRemoteSkills = ref(false)
 const installingRemoteSkill = ref(false)
 const searchQuery = ref('')
+const scopeFilter = ref('')
 
 const isBatchDeleteMode = ref(false)
 const selectedCardSlugs = ref([])
@@ -744,24 +756,36 @@ const recommendedSkillCards = computed(() =>
   }))
 )
 
-const filteredInstalledSkills = computed(() => installedSkillCards.value.filter(matchesSearch))
-const skillGroups = computed(() => [
-  {
-    key: 'recommended',
-    title: '推荐',
-    skills: isBatchDeleteMode.value ? [] : recommendedSkillCards.value.filter(matchesSearch)
-  },
-  {
-    key: 'builtin',
-    title: '内置',
-    skills: filteredInstalledSkills.value.filter((skill) => skill.sourceType === 'builtin')
-  },
-  {
-    key: 'uploaded',
-    title: '上传的',
-    skills: filteredInstalledSkills.value.filter((skill) => skill.sourceType !== 'builtin')
+const filteredInstalledSkills = computed(() =>
+  installedSkillCards.value.filter(
+    (skill) => matchesSearch(skill) && matchesResourceScope(skill, scopeFilter.value, skill.sourceType === 'builtin' ? 'global' : 'user')
+  )
+)
+const skillScopeTags = (skill) => {
+  if (skill.isRecommendation) return [{ name: '推荐', color: 'orange' }]
+  const scope = getResourceScopeMeta(skill, skill.sourceType === 'builtin' ? 'global' : 'user')
+  return [{ name: scope.label, color: scope.color }]
+}
+const skillGroups = computed(() => {
+  const groups = []
+  if (!isBatchDeleteMode.value && (!scopeFilter.value || scopeFilter.value === 'global')) {
+    groups.push({
+      key: 'recommended',
+      title: '推荐',
+      skills: recommendedSkillCards.value.filter(matchesSearch)
+    })
   }
-])
+  for (const scope of RESOURCE_SCOPE_OPTIONS) {
+    groups.push({
+      key: scope.value,
+      title: scope.label,
+      skills: filteredInstalledSkills.value.filter(
+        (skill) => getResourceScope(skill, skill.sourceType === 'builtin' ? 'global' : 'user') === scope.value
+      )
+    })
+  }
+  return groups
+})
 const visibleSkillGroups = computed(() => skillGroups.value.filter((group) => group.skills.length))
 const filteredDeletableSkills = computed(() =>
   filteredInstalledSkills.value.filter(

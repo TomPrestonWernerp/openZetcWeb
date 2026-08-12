@@ -23,6 +23,7 @@
             {{ getKbTypeLabel(t) }}
           </a-select-option>
         </a-select>
+        <ResourceScopeSelect v-model="scopeFilter" />
       </template>
       <template #actions>
         <a-button
@@ -210,9 +211,12 @@
     </ResourceEmptyState>
 
     <!-- 数据库列表 -->
-    <ExtensionCardGrid v-else>
-      <InfoCard
-        v-for="database in filteredDatabases"
+    <template v-else>
+      <template v-for="group in databaseScopeGroups" :key="group.value">
+        <div class="extension-section-header">{{ group.label }}</div>
+        <ExtensionCardGrid>
+          <InfoCard
+        v-for="database in group.resources"
         :key="database.kb_id"
         :title="database.name"
         :subtitle="cardSubtitle(database)"
@@ -246,8 +250,10 @@
             </a-menu-item>
           </a-menu>
         </template>
-      </InfoCard>
-    </ExtensionCardGrid>
+          </InfoCard>
+        </ExtensionCardGrid>
+      </template>
+    </template>
   </div>
 </template>
 
@@ -269,11 +275,17 @@ import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import ExtensionCardGrid from '@/components/extensions/ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
+import ResourceScopeSelect from '@/components/extensions/ResourceScopeSelect.vue'
 import dayjs, { parseToShanghai } from '@/utils/time'
 import AiTextarea from '@/components/AiTextarea.vue'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
 import { getKbTypeLabel, getKbTypeIcon, getKbTypeColor, kbUtils } from '@/utils/kb_utils'
 import { DEFAULT_CHUNK_PRESET_ID } from '@/utils/chunkUtils'
+import {
+  getResourceScopeMeta,
+  groupResourcesByScope,
+  matchesResourceScope
+} from '@/utils/resourceScope'
 
 const route = useRoute()
 const router = useRouter()
@@ -302,6 +314,7 @@ const knowledgeViewItems = [
 const kbTypes = computed(() => Object.keys(supportedKbTypes.value))
 const searchQuery = ref('')
 const typeFilter = ref(null)
+const scopeFilter = ref('')
 
 const filteredDatabases = computed(() => {
   let list = databases.value
@@ -316,8 +329,13 @@ const filteredDatabases = computed(() => {
   if (typeFilter.value) {
     list = list.filter((db) => (db.kb_type || 'milvus') === typeFilter.value)
   }
+  if (scopeFilter.value) {
+    list = list.filter((db) => matchesResourceScope(db, scopeFilter.value, 'user'))
+  }
   return list
 })
+
+const databaseScopeGroups = computed(() => groupResourcesByScope(filteredDatabases.value, 'user'))
 
 const state = reactive({
   openNewDatabaseModel: false
@@ -524,7 +542,9 @@ const cardSubtitle = (database) => {
 }
 
 const cardTags = (database) => {
+  const scope = getResourceScopeMeta(database, 'user')
   const tags = [
+    { name: scope.label, color: scope.color },
     {
       name: getKbTypeLabel(database.kb_type || 'milvus'),
       color: getKbTypeColor(database.kb_type || 'milvus')
@@ -629,6 +649,8 @@ defineExpose({
 </script>
 
 <style lang="less" scoped>
+@import '@/assets/css/extensions.less';
+
 .database-container {
   :deep(.info-card-icon) {
     background: var(--gray-0);

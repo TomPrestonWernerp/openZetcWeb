@@ -53,6 +53,77 @@
                 <span>开始体验</span>
                 <ArrowRight :size="18" />
               </button>
+              <div ref="downloadMenuRef" class="download-entry">
+                <button
+                  class="button-base secondary download-trigger"
+                  type="button"
+                  :aria-expanded="downloadMenuOpen"
+                  aria-haspopup="menu"
+                  @click="downloadMenuOpen = !downloadMenuOpen"
+                >
+                  <Download :size="18" />
+                  <span>{{ downloadButtonLabel }}</span>
+                  <ChevronDown :size="16" :class="{ rotated: downloadMenuOpen }" />
+                </button>
+
+                <div v-if="downloadMenuOpen" class="download-menu" role="menu">
+                  <div class="download-menu-header">
+                    <div>
+                      <strong>下载 openZetcX 桌面端</strong>
+                      <span>{{ releaseVersion ? `最新版本 ${releaseVersion}` : '选择适合电脑的安装包' }}</span>
+                    </div>
+                    <span v-if="downloadLoading" class="download-loading">获取中</span>
+                  </div>
+
+                  <template v-if="desktopPackages.length">
+                    <a
+                      v-if="recommendedPackage"
+                      class="download-option recommended"
+                      :href="recommendedPackage.url"
+                      role="menuitem"
+                      @click="downloadMenuOpen = false"
+                    >
+                      <span class="download-option-icon"><MonitorDown :size="20" /></span>
+                      <span class="download-option-copy">
+                        <strong>{{ recommendedPackage.label }} · {{ recommendedPackage.detail }}</strong>
+                        <small>推荐用于这台电脑</small>
+                      </span>
+                      <span class="recommended-tag"><Check :size="13" /> 推荐</span>
+                    </a>
+
+                    <div class="download-list-label">
+                      {{ recommendedPackage ? '其他版本' : '请选择电脑版本' }}
+                    </div>
+                    <a
+                      v-for="item in alternativePackages"
+                      :key="item.id"
+                      class="download-option"
+                      :href="item.url"
+                      role="menuitem"
+                      @click="downloadMenuOpen = false"
+                    >
+                      <span class="download-option-icon"><Download :size="18" /></span>
+                      <span class="download-option-copy">
+                        <strong>{{ item.label }}</strong>
+                        <small>{{ item.detail }}</small>
+                      </span>
+                    </a>
+                  </template>
+
+                  <a
+                    v-else-if="!downloadLoading"
+                    class="download-release-link"
+                    :href="desktopReleasePageUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    role="menuitem"
+                  >
+                    前往发布页选择安装包
+                    <ArrowRight :size="15" />
+                  </a>
+
+                </div>
+              </div>
             </div>
           </div>
 
@@ -161,7 +232,23 @@ import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
 import { healthApi } from '@/apis/system_api'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
-import { ArrowRight, Workflow, Library, Sparkles } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Download,
+  Library,
+  MonitorDown,
+  Sparkles,
+  Workflow
+} from 'lucide-vue-next'
+import {
+  DESKTOP_RELEASE_API_URL,
+  DESKTOP_RELEASE_PAGE_URL,
+  detectDesktopTarget,
+  findRecommendedPackage,
+  toDesktopPackages
+} from '@/utils/desktopDownload'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -171,8 +258,16 @@ const infoStore = useInfoStore()
 const isLoading = ref(true)
 const error = ref(null)
 let subtitleTimer = null
+let releaseRequestController = null
 
 const subtitleIndex = ref(0)
+const downloadMenuRef = ref(null)
+const downloadMenuOpen = ref(false)
+const downloadLoading = ref(true)
+const desktopTarget = ref({ platform: 'unknown', architecture: 'unknown' })
+const desktopPackages = ref([])
+const releaseVersion = ref('')
+const desktopReleasePageUrl = DESKTOP_RELEASE_PAGE_URL
 
 const subtitleOptions = computed(() => {
   const subtitles = infoStore.branding?.subtitles
@@ -190,6 +285,17 @@ const subtitleOptions = computed(() => {
 })
 
 const currentSubtitle = computed(() => subtitleOptions.value[subtitleIndex.value] || '')
+const recommendedPackage = computed(() =>
+  findRecommendedPackage(desktopPackages.value, desktopTarget.value)
+)
+const alternativePackages = computed(() =>
+  desktopPackages.value.filter((item) => item.id !== recommendedPackage.value?.id)
+)
+const downloadButtonLabel = computed(() => {
+  if (recommendedPackage.value) return `下载 ${recommendedPackage.value.label} 版`
+  if (desktopTarget.value.platform === 'macos') return '选择 macOS 版本'
+  return '下载桌面端'
+})
 
 const stopSubtitleCarousel = () => {
   if (subtitleTimer) {
@@ -258,13 +364,56 @@ const goToChat = async () => {
   router.push('/agent')
 }
 
+const loadDesktopRelease = async () => {
+  releaseRequestController = new AbortController()
+  downloadLoading.value = true
+
+  try {
+    const [target, response] = await Promise.all([
+      detectDesktopTarget(),
+      fetch(DESKTOP_RELEASE_API_URL, {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: releaseRequestController.signal
+      })
+    ])
+    desktopTarget.value = target
+    if (!response.ok) throw new Error(`GitHub Releases 请求失败：${response.status}`)
+
+    const release = await response.json()
+    releaseVersion.value = release.tag_name || ''
+    desktopPackages.value = toDesktopPackages(release.assets)
+  } catch (releaseError) {
+    if (releaseError.name !== 'AbortError') {
+      console.warn('桌面端安装包信息获取失败:', releaseError)
+    }
+  } finally {
+    downloadLoading.value = false
+  }
+}
+
+const closeDownloadMenuOnOutsideClick = (event) => {
+  if (downloadMenuRef.value && !downloadMenuRef.value.contains(event.target)) {
+    downloadMenuOpen.value = false
+  }
+}
+
+const closeDownloadMenuOnEscape = (event) => {
+  if (event.key === 'Escape') downloadMenuOpen.value = false
+}
+
 onMounted(() => {
   // 加载数据
   loadData()
+  loadDesktopRelease()
+  document.addEventListener('click', closeDownloadMenuOnOutsideClick)
+  document.addEventListener('keydown', closeDownloadMenuOnEscape)
 })
 
 onUnmounted(() => {
   stopSubtitleCarousel()
+  releaseRequestController?.abort()
+  document.removeEventListener('click', closeDownloadMenuOnOutsideClick)
+  document.removeEventListener('keydown', closeDownloadMenuOnEscape)
 })
 </script>
 
@@ -424,6 +573,8 @@ onUnmounted(() => {
 }
 
 .hero-content {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
@@ -523,8 +674,187 @@ onUnmounted(() => {
   }
 }
 
+.button-base.secondary {
+  background: var(--gray-0);
+  border-color: var(--main-200);
+  color: var(--main-700);
+  box-shadow: 0 12px 28px -18px var(--shadow-4);
+
+  &:hover {
+    background: var(--main-30);
+    border-color: var(--main-400);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--main-500);
+    outline-offset: 3px;
+  }
+}
+
+.download-entry {
+  position: relative;
+}
+
+.download-trigger svg:last-child {
+  transition: transform 0.2s ease;
+}
+
+.download-trigger svg.rotated {
+  transform: rotate(180deg);
+}
+
+.download-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 12px);
+  left: 0;
+  width: min(360px, calc(100vw - 2.5rem));
+  padding: 12px;
+  border: 1px solid var(--gray-150);
+  border-radius: 12px;
+  background: var(--gray-0);
+  box-shadow: 0 20px 48px -20px var(--shadow-5);
+}
+
+.download-menu-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--gray-150);
+
+  strong,
+  span {
+    display: block;
+  }
+
+  strong {
+    color: var(--color-text);
+    font-size: 0.95rem;
+  }
+
+  span {
+    margin-top: 4px;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .download-loading {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: var(--main-700);
+  }
+}
+
+.download-list-label {
+  padding: 12px 8px 6px;
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+}
+
+.download-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--color-text);
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--main-100);
+    background: var(--main-30);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--main-500);
+    outline-offset: 1px;
+  }
+}
+
+.download-option.recommended {
+  margin-top: 10px;
+  border-color: var(--main-100);
+  background: var(--main-30);
+}
+
+.download-option-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--main-50);
+  color: var(--main-700);
+}
+
+.download-option-copy {
+  min-width: 0;
+  flex: 1;
+
+  strong,
+  small {
+    display: block;
+  }
+
+  strong {
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  small {
+    margin-top: 2px;
+    color: var(--color-text-secondary);
+    font-size: 0.76rem;
+  }
+}
+
+.recommended-tag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--color-success-50);
+  color: var(--color-success-700);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.download-release-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 9px 8px 2px;
+  border-top: 1px solid var(--gray-150);
+  color: var(--main-700);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--main-900);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--main-500);
+    outline-offset: 2px;
+  }
+}
+
 // Hero 右侧可视化卡片
 .hero-visual {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: center;
 }
@@ -855,6 +1185,16 @@ onUnmounted(() => {
 
   .button-base {
     width: 100%;
+  }
+
+  .hero-actions,
+  .download-entry {
+    width: 100%;
+  }
+
+  .download-menu {
+    left: 0;
+    right: auto;
   }
 }
 </style>

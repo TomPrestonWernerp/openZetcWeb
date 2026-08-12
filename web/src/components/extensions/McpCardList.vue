@@ -1,6 +1,9 @@
 <template>
   <div class="mcp-cards-page extension-page-root">
     <PageShoulder search-placeholder="搜索 MCP..." v-model:search="searchQuery">
+      <template #filters>
+        <ResourceScopeSelect v-model="scopeFilter" />
+      </template>
       <template #actions>
         <a-button type="primary" @click="handleMcpAdd" class="lucide-icon-btn">
           <Plus :size="14" />
@@ -33,6 +36,7 @@
           variant="mini"
           :title="formatExtensionCardTitle(server.name)"
           :description="server.description || '暂无描述'"
+          :tags="serverScopeTags(server)"
           @click="handleCardClick(server)"
         >
           <template #icon>
@@ -61,6 +65,7 @@
           variant="mini"
           :title="formatExtensionCardTitle(server.name)"
           :description="server.description || '暂无描述'"
+          :tags="serverScopeTags(server)"
           @click="openBasicInfo(server)"
         >
           <template #icon>
@@ -149,6 +154,7 @@
     <McpFormModal
       v-model:open="formModalVisible"
       :edit-mode="false"
+      :allowed-access-levels="allowedAccessLevels"
       @submitted="handleFormSubmitted"
     />
   </div>
@@ -164,31 +170,43 @@ import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
 import McpFormModal from './McpFormModal.vue'
+import ResourceScopeSelect from './ResourceScopeSelect.vue'
 import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
+import { getResourceScopeMeta, matchesResourceScope } from '@/utils/resourceScope'
 
 const router = useRouter()
 
 const loading = ref(false)
 const servers = ref([])
 const searchQuery = ref('')
+const scopeFilter = ref('')
+const allowedAccessLevels = ref(['user'])
 const formModalVisible = ref(false)
 const basicInfoVisible = ref(false)
 const previewServer = ref(null)
 const actionLoadingSlug = ref('')
 
 const filteredServers = computed(() => {
-  const sorted = [...servers.value].sort((a, b) =>
+  let sorted = [...servers.value].sort((a, b) =>
     String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN', {
       sensitivity: 'base',
       numeric: true
     })
   )
+  if (scopeFilter.value) {
+    sorted = sorted.filter((server) => matchesResourceScope(server, scopeFilter.value))
+  }
   if (!searchQuery.value) return sorted
   const q = searchQuery.value.toLowerCase()
   return sorted.filter(
     (s) => s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
   )
 })
+
+const serverScopeTags = (server) => {
+  const scope = getResourceScopeMeta(server)
+  return [{ name: scope.label, color: scope.color }]
+}
 
 const filteredEnabledServers = computed(() =>
   filteredServers.value.filter((item) => !!item.enabled)
@@ -288,6 +306,7 @@ const fetchServers = async () => {
     const result = await mcpApi.getMcpServers()
     if (result.success) {
       servers.value = result.data || []
+      allowedAccessLevels.value = result.allowed_access_levels || ['user']
     }
   } catch (err) {
     message.error(err.message || '获取 MCP 列表失败')

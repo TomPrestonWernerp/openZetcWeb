@@ -16,7 +16,12 @@ from yuxi.agents.mcp.service import (
     update_mcp_server,
 )
 from yuxi.storage.postgres.models_business import User
-from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
+from yuxi.services.rbac_service import (
+    get_user_permission_map,
+    has_permission,
+    require_permission,
+    validate_share_config,
+)
 from yuxi.utils import logger
 from server.utils.auth_middleware import get_db, get_required_user
 
@@ -165,7 +170,20 @@ async def _serialize_mcp(db: AsyncSession, user: User, server) -> dict:
             access[key] = False
     if not access["can_update"]:
         # MCP 鉴权信息可能包含 API Key、Token 等敏感值。只允许具备编辑权限的用户读取。
-        safe_fields = {"slug", "name", "description", "enabled", "icon", "tags", "access"}
+        safe_fields = {
+            "slug",
+            "name",
+            "description",
+            "enabled",
+            "icon",
+            "tags",
+            "transport",
+            "created_by",
+            "created_by_uid",
+            "department_id",
+            "share_config",
+            "access",
+        }
         data = {key: value for key, value in data.items() if key in safe_fields}
     data["access"] = access
     return data
@@ -190,7 +208,17 @@ async def get_mcp_servers(
                 serialized["access"][code] for code in ("can_update", "can_delete", "can_enable")
             ):
                 data.append(serialized)
-        return {"success": True, "data": data}
+        share_scope = (await get_user_permission_map(db, current_user)).get("mcp.share")
+        allowed_access_levels = ["user"]
+        if share_scope in {"department", "global"}:
+            allowed_access_levels.insert(0, "department")
+        if share_scope == "global":
+            allowed_access_levels.insert(0, "global")
+        return {
+            "success": True,
+            "data": data,
+            "allowed_access_levels": allowed_access_levels,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -225,7 +253,7 @@ async def create_mcp_server_route(
     effective_share_config = await validate_share_config(
         db,
         current_user,
-        "mcp.create",
+        "mcp.share",
         requested_share_config,
         owner_uid=current_user.uid,
         department_id=current_user.department_id,
@@ -321,7 +349,7 @@ async def update_mcp_server_route(
             server.share_config = await validate_share_config(
                 db,
                 current_user,
-                "mcp.update",
+                "mcp.share",
                 request.share_config,
                 owner_uid=server.created_by_uid,
                 department_id=server.department_id,

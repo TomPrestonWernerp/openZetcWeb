@@ -97,6 +97,13 @@
           style="width: 100%"
         />
       </a-form-item>
+      <a-form-item label="可见范围" required class="form-item">
+        <ShareConfigForm
+          ref="shareConfigFormRef"
+          v-model="shareConfig"
+          :allowed-access-levels="allowedAccessLevels"
+        />
+      </a-form-item>
     </a-form>
   </a-modal>
 </template>
@@ -106,11 +113,14 @@ import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { mcpApi } from '@/apis/mcp_api'
 import McpEnvEditor from '@/components/McpEnvEditor.vue'
+import ShareConfigForm from '@/components/ShareConfigForm.vue'
+import { useUserStore } from '@/stores/user'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
   editMode: { type: Boolean, default: false },
-  editData: { type: Object, default: null }
+  editData: { type: Object, default: null },
+  allowedAccessLevels: { type: Array, default: () => ['user'] }
 })
 
 const emit = defineEmits(['update:open', 'submitted'])
@@ -121,6 +131,14 @@ const visible = computed({
 })
 
 const formLoading = ref(false)
+const userStore = useUserStore()
+const shareConfigFormRef = ref(null)
+const defaultShareConfig = () => ({
+  access_level: props.allowedAccessLevels[0] || 'user',
+  department_ids: [],
+  user_uids: userStore.uid ? [userStore.uid] : []
+})
+const shareConfig = ref(defaultShareConfig())
 
 const form = reactive({
   slug: '',
@@ -149,6 +167,7 @@ watch(
   () => props.open,
   (val) => {
     if (val && props.editData) {
+      shareConfig.value = props.editData.share_config || defaultShareConfig()
       Object.assign(form, {
         slug: props.editData.slug || '',
         name: props.editData.name || '',
@@ -165,6 +184,7 @@ watch(
         icon: props.editData.icon || ''
       })
     } else if (val && !props.editData) {
+      shareConfig.value = defaultShareConfig()
       Object.assign(form, {
         slug: '',
         name: '',
@@ -210,7 +230,18 @@ const handleFormSubmit = async () => {
       timeout: form.timeout || null,
       sse_read_timeout: form.sse_read_timeout || null,
       tags: form.tags.length > 0 ? form.tags : null,
-      icon: form.icon || null
+      icon: form.icon || null,
+      share_config: {
+        access_level: shareConfig.value.access_level,
+        department_ids:
+          shareConfig.value.access_level === 'department' ? shareConfig.value.department_ids || [] : [],
+        user_uids: shareConfig.value.access_level === 'user' ? shareConfig.value.user_uids || [] : []
+      }
+    }
+    const shareValidation = shareConfigFormRef.value?.validate?.()
+    if (shareValidation && !shareValidation.valid) {
+      message.warning(shareValidation.message)
+      return
     }
     if (!data.slug?.trim()) {
       message.error('MCP 标识不能为空')

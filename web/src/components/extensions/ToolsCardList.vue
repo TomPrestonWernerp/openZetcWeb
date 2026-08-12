@@ -13,6 +13,7 @@
             {{ categoryLabels[cat] || cat }}
           </a-select-option>
         </a-select>
+        <ResourceScopeSelect v-model="selectedScope" />
       </template>
       <template #actions>
         <a-tooltip title="刷新工具" placement="bottom">
@@ -119,7 +120,9 @@ import { getToolIcon } from '@/components/ToolCallingResult/toolRegistry'
 import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
+import ResourceScopeSelect from './ResourceScopeSelect.vue'
 import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
+import { getResourceScopeMeta, matchesResourceScope } from '@/utils/resourceScope'
 
 const WrenchIcon = Wrench
 
@@ -129,6 +132,7 @@ const selectedCategory = ref('')
 const tools = ref([])
 const currentTool = ref(null)
 const detailVisible = ref(false)
+const selectedScope = ref('')
 
 const categories = ['buildin', 'knowledge', 'mysql', 'debug']
 const categoryLabels = { buildin: '内置工具', knowledge: '知识库', mysql: 'MySQL', debug: '调试' }
@@ -137,7 +141,8 @@ const categoryColors = { buildin: 'blue', knowledge: 'purple', mysql: 'green', d
 const getToolSlug = (tool) => tool?.slug || tool?.id || ''
 
 const toolTags = (tool) => {
-  const tags = []
+  const scope = getResourceScopeMeta(tool)
+  const tags = [{ name: scope.label, color: scope.color }]
   if (tool.category) {
     tags.push({
       name: categoryLabels[tool.category] || tool.category,
@@ -156,6 +161,9 @@ const argColumns = [
 
 const filteredTools = computed(() => {
   let result = tools.value
+  if (selectedScope.value) {
+    result = result.filter((tool) => matchesResourceScope(tool, selectedScope.value))
+  }
   if (selectedCategory.value) {
     result = result.filter((t) => t.category === selectedCategory.value)
   }

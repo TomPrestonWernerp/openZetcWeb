@@ -14,13 +14,13 @@
       <div v-if="activeTab === 'knowledge'" class="tab-panel">
         <DataBaseView ref="knowledgeRef" embedded />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'tools'" class="tab-panel">
+      <div v-if="activeTab === 'tools'" class="tab-panel">
         <ToolsCardList ref="toolsRef" />
       </div>
       <div v-if="activeTab === 'skills'" class="tab-panel">
         <SkillCardList ref="skillsRef" />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'mcp'" class="tab-panel">
+      <div v-if="activeTab === 'mcp'" class="tab-panel">
         <McpCardList ref="mcpRef" />
       </div>
     </div>
@@ -37,30 +37,23 @@ import McpCardList from '@/components/extensions/McpCardList.vue'
 import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
-import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 const activeTab = ref(null)
 const knowledgeRef = ref(null)
 const skillsRef = ref(null)
 const mcpRef = ref(null)
 const toolsRef = ref(null)
 
-const adminExtensionTabs = [
+const extensionTabs = [
   { key: 'knowledge', label: '知识库' },
   { key: 'tools', label: '工具' },
   { key: 'mcp', label: 'MCP' },
   { key: 'skills', label: 'Skills' }
 ]
-const userExtensionTabs = [
-  { key: 'knowledge', label: '知识库' },
-  { key: 'skills', label: 'Skills' }
-]
-const extensionTabs = computed(() => (userStore.isAdmin ? adminExtensionTabs : userExtensionTabs))
-const allowedTabKeys = computed(() => extensionTabs.value.map((tab) => tab.key))
-const defaultTabKey = computed(() => extensionTabs.value[0]?.key || 'skills')
+const allowedTabKeys = computed(() => extensionTabs.map((tab) => tab.key))
+const defaultTabKey = computed(() => extensionTabs[0]?.key || 'skills')
 
 const normalizeTab = (tab) => {
   if (allowedTabKeys.value.includes(tab)) return tab
@@ -97,8 +90,8 @@ const activeChildLoading = computed(() => {
 })
 
 watch(
-  () => [route.query.tab, userStore.isAdmin],
-  ([tab]) => {
+  () => route.query.tab,
+  (tab) => {
     const nextTab = normalizeTab(tab)
     if (activeTab.value !== nextTab) activeTab.value = nextTab
     if (tab && tab !== nextTab) replaceTabQuery(nextTab)
