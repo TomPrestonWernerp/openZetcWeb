@@ -8,7 +8,6 @@
     :closable="false"
     @cancel="handleClose"
     class="settings-modal"
-    :class="{ 'settings-modal-wide': isManagementTab }"
     :destroyOnClose="true"
     :bodyStyle="{ padding: 0 }"
   >
@@ -247,15 +246,11 @@ const visible = computed({
   set: (value) => emit('update:visible', value)
 })
 
-const isManagementTab = computed(() =>
-  ['user', 'rolePermissions', 'department'].includes(activeTab.value)
-)
-
-const modalStyle = computed(() => ({
-  maxWidth: isManagementTab.value ? '1320px' : '980px',
+const modalStyle = {
+  maxWidth: '1320px',
   minWidth: '320px',
-  top: isManagementTab.value ? '4%' : '10%'
-}))
+  top: '4%'
+}
 
 const availableTabs = computed(() => {
   const tabs = []
@@ -307,20 +302,9 @@ watch(
   }
 }
 
-.settings-modal-wide.ant-modal {
-  .settings-container {
-    height: 82vh;
-
-    @media (max-width: 900px) {
-      height: auto;
-      min-height: 70vh;
-    }
-  }
-}
-
 .settings-container {
   display: flex;
-  height: 70vh;
+  height: 82vh;
   width: 100%;
   position: relative;
 
