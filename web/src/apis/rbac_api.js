@@ -26,5 +26,12 @@ export const rbacApi = {
   },
   updateUserRoles(userId, roleIds) {
     return apiPut(`${BASE_URL}/users/${userId}/roles`, { role_ids: roleIds })
+  },
+  updateUsersRoles(userIds, roleIds, mode) {
+    return apiPut(`${BASE_URL}/users/batch/roles`, {
+      user_ids: userIds,
+      role_ids: roleIds,
+      mode
+    })
   }
 }

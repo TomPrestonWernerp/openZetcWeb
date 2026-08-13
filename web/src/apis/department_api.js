@@ -2,12 +2,7 @@
  * 部门管理 API
  */
 
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiDelete
-} from './base'
+import { apiGet, apiPost, apiPut, apiDelete } from './base'
 
 const BASE_URL = '/api/departments'
 
@@ -26,6 +21,28 @@ export const getDepartments = () => {
  */
 export const getDepartment = (departmentId) => {
   return apiGet(`${BASE_URL}/${departmentId}`)
+}
+
+/**
+ * 获取部门成员
+ * @param {number} departmentId - 部门ID
+ * @returns {Promise<Array>} 部门成员列表
+ */
+export const getDepartmentUsers = (departmentId) => {
+  return apiGet(`${BASE_URL}/${departmentId}/users`)
+}
+
+/**
+ * 批量调整用户所属部门
+ * @param {Array<number>} userIds - 用户ID列表
+ * @param {number} departmentId - 目标部门ID
+ * @returns {Promise<Object>} 批量操作结果
+ */
+export const batchUpdateUserDepartment = (userIds, departmentId) => {
+  return apiPut('/api/auth/users/batch/department', {
+    user_ids: userIds,
+    department_id: departmentId
+  })
 }
 
 /**
@@ -74,6 +91,8 @@ export const updateRolePermissions = (departmentId, role, permissions) => {
 export const departmentApi = {
   getDepartments,
   getDepartment,
+  getDepartmentUsers,
+  batchUpdateUserDepartment,
   createDepartment,
   updateDepartment,
   deleteDepartment,

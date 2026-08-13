@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.models_business import (
@@ -320,6 +320,183 @@ async def get_user_roles(db: AsyncSession, user_id: int) -> list[RBACRole]:
         .order_by(RBACRole.is_system.desc(), RBACRole.name.asc())
     )
     return list(result.scalars().all())
+
+
+async def update_users_roles(
+    db: AsyncSession,
+    current_user: User,
+    targets: list[User],
+    role_ids: list[int],
+    mode: Literal["add", "remove", "replace"] = "replace",
+) -> dict[int, list[RBACRole]]:
+    """Validate and stage role changes for one or more users without committing.
+
+    The caller owns the transaction. All targets are validated before any binding is
+    changed, so a failed batch never leaves a partially updated role assignment.
+    """
+    if not targets:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少选择一名用户")
+    unique_role_ids = list(dict.fromkeys(role_ids))
+    if not unique_role_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少选择一个角色")
+
+    await db.execute(select(User.id).where(User.id.in_([target.id for target in targets])).with_for_update())
+    role_result = await db.execute(select(RBACRole).where(RBACRole.id.in_(unique_role_ids)))
+    requested_roles = list(role_result.scalars().all())
+    if len(requested_roles) != len(unique_role_ids):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="包含不存在的角色")
+    requested_by_id = {role.id: role for role in requested_roles}
+
+    target_ids = [target.id for target in targets]
+    current_result = await db.execute(
+        select(RBACUserRole.user_id, RBACRole)
+        .join(RBACRole, RBACRole.id == RBACUserRole.role_id)
+        .where(RBACUserRole.user_id.in_(target_ids))
+    )
+    current_by_user: dict[int, dict[int, RBACRole]] = {target_id: {} for target_id in target_ids}
+    for target_id, role in current_result.all():
+        current_by_user[target_id][role.id] = role
+
+    actor_permissions = await get_user_permission_map(db, current_user)
+    permission_result = await db.execute(
+        select(RBACRolePermission.role_id, RBACPermission.code, RBACRolePermission.scope)
+        .join(RBACPermission, RBACPermission.id == RBACRolePermission.permission_id)
+        .where(RBACRolePermission.role_id.in_(unique_role_ids))
+    )
+    grants_by_role: dict[int, dict[str, str]] = {role_id: {} for role_id in unique_role_ids}
+    for role_id, code, scope in permission_result.all():
+        grants_by_role[role_id][code] = scope
+
+    system_codes = {item["code"]: legacy for legacy, item in BUILTIN_ROLE_DEFINITIONS.items()}
+    resulting: dict[int, dict[int, RBACRole]] = {}
+    for target in targets:
+        await require_permission(
+            db,
+            current_user,
+            "user.assign_role",
+            department_id=target.department_id,
+            target_user_id=target.id,
+        )
+        await require_permission(
+            db,
+            current_user,
+            "role.assign",
+            department_id=target.department_id,
+            target_user_id=target.id,
+        )
+        if target.role == "superadmin":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="超级管理员角色不可修改")
+        if target.id == current_user.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能修改自己的角色")
+
+        current = current_by_user[target.id]
+        if mode == "add":
+            candidate = {**current, **requested_by_id}
+        elif mode == "remove":
+            candidate = {role_id: role for role_id, role in current.items() if role_id not in requested_by_id}
+        else:
+            candidate = requested_by_id.copy()
+
+        for role in candidate.values():
+            if role.department_id is not None and role.department_id != target.department_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能分配其他部门的角色")
+
+        added_ids = set(candidate) - set(current)
+        for role_id in added_ids:
+            role = candidate[role_id]
+            if role.department_id is None and not role.is_system:
+                assignment_scope = await require_permission(db, current_user, "role.assign")
+                if assignment_scope != "global":
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能分配公司级自定义角色")
+
+        for role_id in added_ids:
+            added_role = requested_by_id[role_id]
+            if added_role.is_system:
+                legacy_role = system_codes.get(added_role.code)
+                if legacy_role == "superadmin" or (
+                    legacy_role == "admin" and current_user.role != "superadmin"
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"不能分配系统角色：{added_role.name}",
+                    )
+                # Department administrators are explicitly allowed to assign the
+                # built-in member role even though some read permissions are global.
+                continue
+            exceeded = [
+                code
+                for code, scope in grants_by_role.get(role_id, {}).items()
+                if SCOPE_RANK.get(actor_permissions.get(code), 0) < SCOPE_RANK.get(scope, 0)
+            ]
+            if exceeded:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"不能分配超出自身权限的角色：{requested_by_id[role_id].name}",
+                )
+
+        base_roles = [role for role in candidate.values() if role.code in system_codes]
+        if not base_roles:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="每名用户至少需要保留一个系统基础角色")
+        if len(base_roles) > 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="每名用户只能分配一个系统基础角色")
+        if base_roles[0].code == BUILTIN_ROLE_DEFINITIONS["superadmin"]["code"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="超级管理员角色不可通过授权接口分配")
+        resulting[target.id] = candidate
+
+    affected_departments = {
+        int(target.department_id)
+        for target in targets
+        if target.department_id is not None and target.role == "admin"
+    }
+    if affected_departments:
+        count_result = await db.execute(
+            select(User.department_id, func.count(User.id))
+            .where(
+                User.department_id.in_(affected_departments),
+                User.role == "admin",
+                User.is_deleted == 0,
+            )
+            .group_by(User.department_id)
+        )
+        admin_counts = {int(department_id): count for department_id, count in count_result.all()}
+        for department_id in affected_departments:
+            removed = sum(
+                1
+                for target in targets
+                if target.department_id == department_id
+                and target.role == "admin"
+                and system_codes[next(role.code for role in resulting[target.id].values() if role.code in system_codes)]
+                != "admin"
+            )
+            if admin_counts.get(department_id, 0) - removed < 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="不能移除部门唯一管理员的管理员角色",
+                )
+
+    for target in targets:
+        current = current_by_user[target.id]
+        candidate = resulting[target.id]
+        removed_ids = set(current) - set(candidate)
+        if removed_ids:
+            await db.execute(
+                delete(RBACUserRole).where(
+                    RBACUserRole.user_id == target.id,
+                    RBACUserRole.role_id.in_(removed_ids),
+                )
+            )
+        for role_id in set(candidate) - set(current):
+            db.add(
+                RBACUserRole(
+                    user_id=target.id,
+                    role_id=role_id,
+                    assigned_by_user_id=current_user.id,
+                )
+            )
+        base_role = next(role for role in candidate.values() if role.code in system_codes)
+        target.role = system_codes[base_role.code]
+    await db.flush()
+    return {user_id: list(roles.values()) for user_id, roles in resulting.items()}
 
 
 async def has_permission(

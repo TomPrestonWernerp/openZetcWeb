@@ -5,12 +5,7 @@
         <h2>权限管理</h2>
         <p>统一管理人员、角色、权限和业务资源范围。所有授权均由服务端强制校验。</p>
       </div>
-      <a-button
-        v-if="canCreateRole"
-        type="primary"
-        class="lucide-icon-btn"
-        @click="openCreateRole"
-      >
+      <a-button v-if="canCreateRole" type="primary" class="lucide-icon-btn" @click="openCreateRole">
         <template #icon><Plus :size="15" /></template>
         新建角色
       </a-button>
@@ -32,12 +27,14 @@
                 v-for="role in roles"
                 :key="role.id"
                 class="role-list-item"
-                :class="{ active: selectedRole?.id === role.id }"
+                :class="{ active: Number(selectedRole?.id) === Number(role.id) }"
                 @click="selectRole(role)"
               >
                 <span>
                   <strong>{{ role.name }}</strong>
-                  <small>{{ role.department_id ? departmentName(role.department_id) : '公司级' }}</small>
+                  <small>{{
+                    role.department_id ? departmentName(role.department_id) : '公司级'
+                  }}</small>
                 </span>
                 <a-tag :color="role.is_system ? 'blue' : 'default'">
                   {{ role.is_system ? '系统' : '自定义' }}
@@ -102,7 +99,11 @@
                   </a-button>
                 </header>
                 <div class="permission-list">
-                  <div v-for="permission in domain.items" :key="permission.code" class="permission-row">
+                  <div
+                    v-for="permission in domain.items"
+                    :key="permission.code"
+                    class="permission-row"
+                  >
                     <div>
                       <strong>{{ permission.label }}</strong>
                       <p>{{ permission.description }}</p>
@@ -142,38 +143,92 @@
       <a-tab-pane key="users" tab="用户授权">
         <div class="user-role-panel">
           <div class="user-role-toolbar">
-            <a-select
-              v-model:value="selectedUserId"
-              show-search
-              option-filter-prop="label"
-              placeholder="选择用户"
-              :options="userOptions"
-              @change="loadUserRoles"
+            <a-input-search
+              v-model:value="userKeyword"
+              allow-clear
+              placeholder="搜索用户名 / UID / 手机号"
             />
-            <a-button
-              type="primary"
-              :disabled="!selectedUserId || !canAssignRole"
-              :loading="savingUserRoles"
-              @click="saveUserRoles"
-            >
-              保存用户角色
-            </a-button>
+            <a-select
+              v-model:value="userDepartmentFilter"
+              allow-clear
+              placeholder="全部部门"
+              :options="departmentFilterOptions"
+            />
           </div>
-          <div v-if="selectedUserId" class="assignable-role-grid">
-            <label
-              v-for="role in assignableRoles"
-              :key="role.id"
-              class="assignable-role"
-              :class="{ checked: selectedUserRoleIds.includes(role.id) }"
-            >
-              <a-checkbox v-model:checked="roleSelection[role.id]" />
-              <span>
-                <strong>{{ role.name }}</strong>
-                <small>{{ role.description || '无角色说明' }}</small>
-              </span>
-            </label>
+
+          <a-table
+            :data-source="filteredUsers"
+            :columns="userColumns"
+            :row-key="(record) => record.id"
+            :row-selection="userRowSelection"
+            :loading="loading"
+            :pagination="{ pageSize: 8, hideOnSinglePage: true, showSizeChanger: false }"
+            :scroll="{ x: 620 }"
+            size="small"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'user'">
+                <div class="user-identity">
+                  <strong>{{ record.username }}</strong>
+                  <span>{{ record.uid }}</span>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'department'">
+                {{ record.department_name || '未分配部门' }}
+              </template>
+              <template v-else-if="column.key === 'roles'">
+                <a-space :size="4" wrap>
+                  <a-tag
+                    v-for="role in record.rbac_roles ||
+                    record.roles ||
+                    (record.role ? [record.role] : [])"
+                    :key="role.id || role"
+                  >
+                    {{ role.name || role }}
+                  </a-tag>
+                  <span
+                    v-if="
+                      !(record.rbac_roles || record.roles || (record.role ? [record.role] : []))
+                        .length
+                    "
+                    class="muted-text"
+                  >
+                    暂无角色
+                  </span>
+                </a-space>
+              </template>
+            </template>
+          </a-table>
+
+          <div v-if="canAssignRole" class="batch-role-bar">
+            <div>
+              <strong>已选择 {{ selectedUserIds.length }} 人</strong>
+              <span>选择角色和处理方式，一次完成授权</span>
+            </div>
+            <div class="batch-role-controls">
+              <a-select
+                v-model:value="batchRoleIds"
+                mode="multiple"
+                placeholder="选择一个或多个角色"
+                :options="batchRoleOptions"
+                :max-tag-count="2"
+                :disabled="!selectedUserIds.length"
+              />
+              <a-select v-model:value="batchRoleMode" :disabled="!selectedUserIds.length">
+                <a-select-option value="add">增加角色</a-select-option>
+                <a-select-option value="remove">移除角色</a-select-option>
+                <a-select-option value="replace">覆盖角色</a-select-option>
+              </a-select>
+              <a-button
+                type="primary"
+                :disabled="!canSubmitBatchRoles"
+                :loading="savingUserRoles"
+                @click="saveUsersRoles"
+              >
+                应用到所选用户
+              </a-button>
+            </div>
           </div>
-          <a-empty v-else description="选择用户后可分配一个或多个角色" />
         </div>
       </a-tab-pane>
 
@@ -199,7 +254,11 @@
     >
       <a-form layout="vertical">
         <a-form-item label="角色名称" required>
-          <a-input v-model:value="createForm.name" :maxlength="100" placeholder="例如：知识平台主管" />
+          <a-input
+            v-model:value="createForm.name"
+            :maxlength="100"
+            placeholder="例如：知识平台主管"
+          />
         </a-form-item>
         <a-form-item label="适用范围">
           <a-select
@@ -242,9 +301,11 @@ const permissions = ref([])
 const departments = ref([])
 const users = ref([])
 const selectedRole = ref(null)
-const selectedUserId = ref(null)
-const selectedUserRoleIds = ref([])
-const roleSelection = reactive({})
+const selectedUserIds = ref([])
+const userKeyword = ref('')
+const userDepartmentFilter = ref(undefined)
+const batchRoleIds = ref([])
+const batchRoleMode = ref('add')
 const createModalOpen = ref(false)
 
 const roleForm = reactive({ name: '', description: '', permissions: {} })
@@ -276,28 +337,70 @@ const canDeleteRole = computed(() => userStore.hasPermission('role.delete'))
 const canAssignRole = computed(
   () => userStore.hasPermission('role.assign') && userStore.hasPermission('user.assign_role')
 )
-const assignableRoles = computed(() => {
-  const user = users.value.find((item) => item.id === selectedUserId.value)
-  return roles.value.filter(
-    (role) =>
-      role.code !== 'system.superadmin' &&
-      (!role.department_id || Number(role.department_id) === Number(user?.department_id))
-  )
-})
-const selectedUserRoleIdsComputed = computed(() =>
-  Object.entries(roleSelection)
-    .filter(([, checked]) => checked)
-    .map(([id]) => Number(id))
+const userColumns = [
+  { title: '用户', key: 'user', width: 200 },
+  { title: '部门', key: 'department', width: 150 },
+  { title: '当前角色', key: 'roles', width: 260 }
+]
+const departmentFilterOptions = computed(() =>
+  departments.value.map((department) => ({ value: Number(department.id), label: department.name }))
 )
-const userOptions = computed(() =>
-  users.value.map((user) => ({
-    value: user.id,
-    label: `${user.username}（${user.uid} · ${user.department_name || '未分配部门'}）`
-  }))
+const filteredUsers = computed(() => {
+  const keyword = userKeyword.value.trim().toLowerCase()
+  return users.value.filter((user) => {
+    const matchesKeyword =
+      !keyword ||
+      [user.username, user.uid, user.phone_number].some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(keyword)
+      )
+    const matchesDepartment =
+      !userDepartmentFilter.value ||
+      Number(user.department_id) === Number(userDepartmentFilter.value)
+    return matchesKeyword && matchesDepartment
+  })
+})
+const batchRoleOptions = computed(() =>
+  roles.value
+    .filter((role) => {
+      if (role.code === 'system.superadmin') return false
+      if (!role.department_id || !selectedUserIds.value.length) return true
+      const selectedDepartments = new Set(
+        users.value
+          .filter((user) => selectedUserIds.value.includes(user.id))
+          .map((user) => Number(user.department_id))
+      )
+      return selectedDepartments.size === 1 && selectedDepartments.has(Number(role.department_id))
+    })
+    .map((role) => ({
+      value: Number(role.id),
+      label: `${role.name} · ${role.department_id ? departmentName(role.department_id) : '公司级'}`
+    }))
+)
+const userRowSelection = computed(() => ({
+  selectedRowKeys: selectedUserIds.value,
+  onChange: (keys) => {
+    selectedUserIds.value = keys
+  },
+  getCheckboxProps: () => ({ disabled: !canAssignRole.value })
+}))
+const canSubmitBatchRoles = computed(
+  () => selectedUserIds.value.length > 0 && batchRoleIds.value.length > 0
 )
 
 const departmentName = (departmentId) =>
   departments.value.find((item) => Number(item.id) === Number(departmentId))?.name || '未知部门'
+
+const loadUsersWithRoles = async () => {
+  const userData = await userStore.getUsers()
+  return Promise.all(
+    userData.map(async (user) => ({
+      ...user,
+      rbac_roles: await rbacApi.getUserRoles(user.id)
+    }))
+  )
+}
 
 const scopeRank = { own: 1, department: 2, global: 3 }
 const canGrantScope = (permissionCode, scope) =>
@@ -324,13 +427,15 @@ const refreshAll = async () => {
       rbacApi.getPermissions(),
       rbacApi.getRoles(),
       departmentApi.getDepartments(),
-      userStore.getUsers()
+      loadUsersWithRoles()
     ])
     permissions.value = permissionData
     roles.value = roleData
     departments.value = departmentData
     users.value = userData
-    const preferred = roles.value.find((item) => item.id === selectedRole.value?.id) || roles.value[0]
+    const preferred =
+      roles.value.find((item) => Number(item.id) === Number(selectedRole.value?.id)) ||
+      roles.value[0]
     if (preferred) selectRole(preferred)
   } catch (error) {
     message.error(error.message || '加载权限数据失败')
@@ -384,7 +489,7 @@ const saveSelectedRole = async () => {
         Object.entries(roleForm.permissions).filter(([, scope]) => Boolean(scope))
       )
     })
-    const index = roles.value.findIndex((item) => item.id === updated.id)
+    const index = roles.value.findIndex((item) => Number(item.id) === Number(updated.id))
     if (index >= 0) roles.value[index] = updated
     selectRole(updated)
     message.success('角色权限已保存')
@@ -402,7 +507,7 @@ const removeSelectedRole = () => {
     okType: 'danger',
     async onOk() {
       await rbacApi.deleteRole(selectedRole.value.id)
-      roles.value = roles.value.filter((item) => item.id !== selectedRole.value.id)
+      roles.value = roles.value.filter((item) => Number(item.id) !== Number(selectedRole.value.id))
       selectedRole.value = null
       if (roles.value[0]) selectRole(roles.value[0])
       message.success('角色已删除')
@@ -410,33 +515,16 @@ const removeSelectedRole = () => {
   })
 }
 
-const loadUserRoles = async () => {
-  Object.keys(roleSelection).forEach((key) => delete roleSelection[key])
-  if (!selectedUserId.value) return
-  try {
-    const assigned = await rbacApi.getUserRoles(selectedUserId.value)
-    selectedUserRoleIds.value = assigned.map((item) => item.id)
-    roles.value.forEach((role) => {
-      roleSelection[role.id] = selectedUserRoleIds.value.includes(role.id)
-    })
-  } catch (error) {
-    message.error(error.message || '加载用户角色失败')
-  }
-}
-
-const saveUserRoles = async () => {
-  const roleIds = selectedUserRoleIdsComputed.value
-  if (!roleIds.length) {
-    message.warning('至少保留一个角色')
-    return
-  }
+const saveUsersRoles = async () => {
   savingUserRoles.value = true
   try {
-    await rbacApi.updateUserRoles(selectedUserId.value, roleIds)
-    selectedUserRoleIds.value = roleIds
-    message.success('用户角色已更新')
+    await rbacApi.updateUsersRoles(selectedUserIds.value, batchRoleIds.value, batchRoleMode.value)
+    message.success(`已更新 ${selectedUserIds.value.length} 位用户的角色`)
+    selectedUserIds.value = []
+    batchRoleIds.value = []
+    users.value = await loadUsersWithRoles()
   } catch (error) {
-    message.error(error.message || '保存用户角色失败')
+    message.error(error.message || '批量更新用户角色失败')
   } finally {
     savingUserRoles.value = false
   }
@@ -646,10 +734,66 @@ onMounted(refreshAll)
 }
 
 .user-role-toolbar {
+  justify-content: flex-start;
   margin-bottom: 18px;
 
+  .ant-input-search {
+    width: min(360px, 55%);
+  }
+
   .ant-select {
-    width: min(520px, 70%);
+    width: 180px;
+  }
+}
+
+.user-identity {
+  display: grid;
+
+  span {
+    color: var(--gray-500);
+    font-size: 12px;
+  }
+}
+
+.muted-text {
+  color: var(--gray-500);
+  font-size: 12px;
+}
+
+.batch-role-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--gray-50);
+
+  > div:first-child {
+    display: grid;
+    flex: 0 0 auto;
+
+    span {
+      color: var(--gray-500);
+      font-size: 12px;
+    }
+  }
+}
+
+.batch-role-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+
+  .ant-select:first-child {
+    width: 230px;
+  }
+
+  .ant-select:nth-child(2) {
+    width: 112px;
   }
 }
 
@@ -731,6 +875,21 @@ onMounted(refreshAll)
 
   .permission-row:nth-child(odd) {
     border-right: 0;
+  }
+
+  .user-role-toolbar,
+  .batch-role-bar,
+  .batch-role-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-role-toolbar .ant-input-search,
+  .user-role-toolbar .ant-select,
+  .batch-role-controls,
+  .batch-role-controls .ant-select:first-child,
+  .batch-role-controls .ant-select:nth-child(2) {
+    width: 100%;
   }
 }
 </style>

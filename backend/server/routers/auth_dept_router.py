@@ -189,6 +189,30 @@ async def get_department(
     return {**department.to_dict(), "user_count": user_count}
 
 
+@department.get("/{department_id}/users")
+async def get_department_users(
+    department_id: int,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return active department members within the caller's authorized scope."""
+    await require_permission(db, current_user, "department.view", department_id=department_id)
+    await require_permission(db, current_user, "user.view", department_id=department_id)
+    department_result = await db.execute(select(Department).where(Department.id == department_id))
+    target_department = department_result.scalar_one_or_none()
+    if target_department is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="部门不存在")
+    result = await db.execute(
+        select(User)
+        .where(User.department_id == department_id, User.is_deleted == 0)
+        .order_by(User.role.asc(), User.username.asc())
+    )
+    return {
+        "department": target_department.to_dict(),
+        "users": [user.to_dict() for user in result.scalars().all()],
+    }
+
+
 @department.post("", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_department(
     department_data: DepartmentCreate,

@@ -1,15 +1,23 @@
+from io import BytesIO
 import re
 from yuxi.utils import logger
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import APIKey, User, Department
+from yuxi.storage.postgres.models_business import (
+    APIKey,
+    Department,
+    OperationLog,
+    RBACRole,
+    RBACUserRole,
+    User,
+)
 from yuxi.repositories.user_repository import UserRepository
 from yuxi.repositories.department_repository import DepartmentRepository
 from server.utils.auth_middleware import (
@@ -20,7 +28,12 @@ from server.utils.auth_middleware import (
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
 from yuxi.services.operation_log_service import log_operation
-from yuxi.services.rbac_service import require_permission, sync_user_system_role
+from yuxi.services.rbac_service import require_permission, sync_user_system_role, update_users_roles
+from yuxi.services.user_import_service import (
+    create_user_import_template,
+    public_import_rows,
+    validate_user_import,
+)
 from yuxi.services.auth_service import (
     CLI_AUTH_POLL_INTERVAL_SECONDS,
     CLI_AUTH_SESSION_TTL_SECONDS,
@@ -80,6 +93,11 @@ class UserUpdate(BaseModel):
 class UserProfileUpdate(BaseModel):
     username: str | None = None
     phone_number: str | None = None
+
+
+class BatchUserDepartmentUpdate(BaseModel):
+    user_ids: list[int] = Field(min_length=1)
+    department_id: int
 
 
 class UserResponse(BaseModel):
@@ -510,6 +528,186 @@ async def update_profile(
 # =============================================================================
 # === 用户管理分组 ===
 # =============================================================================
+
+
+@auth.put("/users/batch/department")
+async def update_users_department(
+    data: BatchUserDepartmentUpdate,
+    request: Request,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_ids = list(dict.fromkeys(data.user_ids))
+    department_result = await db.execute(select(Department).where(Department.id == data.department_id))
+    target_department = department_result.scalar_one_or_none()
+    if target_department is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="目标部门不存在")
+    result = await db.execute(
+        select(User).where(User.id.in_(user_ids), User.is_deleted == 0).with_for_update()
+    )
+    users_by_id = {user.id: user for user in result.scalars().all()}
+    if len(users_by_id) != len(user_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="包含不存在的用户")
+    targets = [users_by_id[user_id] for user_id in user_ids]
+
+    for target in targets:
+        update_scope = await require_permission(
+            db,
+            current_user,
+            "user.update",
+            department_id=target.department_id,
+            target_user_id=target.id,
+        )
+        if update_scope != "global":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="批量跨部门调整需要全局人员编辑权限")
+        if target.role == "superadmin":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="超级管理员不能移动部门")
+        if target.id == current_user.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能移动当前登录用户的部门")
+
+    admin_departments = {
+        int(target.department_id)
+        for target in targets
+        if target.role == "admin" and target.department_id is not None and target.department_id != data.department_id
+    }
+    for department_id in admin_departments:
+        count_result = await db.execute(
+            select(func.count(User.id)).where(
+                User.department_id == department_id,
+                User.role == "admin",
+                User.is_deleted == 0,
+            )
+        )
+        moving_count = sum(
+            target.role == "admin" and target.department_id == department_id for target in targets
+        )
+        if int(count_result.scalar() or 0) - moving_count < 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能移走部门唯一管理员")
+
+    incompatible_binding_result = await db.execute(
+        select(RBACUserRole.user_id, RBACUserRole.role_id, RBACRole.name)
+        .join(RBACRole, RBACRole.id == RBACUserRole.role_id)
+        .where(
+            RBACUserRole.user_id.in_(user_ids),
+            RBACRole.department_id.is_not(None),
+            RBACRole.department_id != data.department_id,
+        )
+    )
+    incompatible_bindings = list(incompatible_binding_result.all())
+    if incompatible_bindings:
+        await db.execute(
+            delete(RBACUserRole).where(
+                RBACUserRole.user_id.in_(user_ids),
+                RBACUserRole.role_id.in_({role_id for _, role_id, _ in incompatible_bindings}),
+            )
+        )
+
+    for target in targets:
+        target.department_id = data.department_id
+    await db.flush()
+    await db.commit()
+    await log_operation(
+        db,
+        current_user.id,
+        "批量调整用户部门",
+        f"将 {len(targets)} 名用户调整到部门 {target_department.name}",
+        request,
+    )
+    return {
+        "updated_count": len(targets),
+        "user_ids": user_ids,
+        "department": target_department.to_dict(),
+        "removed_role_binding_count": len(incompatible_bindings),
+        "removed_role_bindings": [
+            {"user_id": user_id, "role_id": role_id, "role_name": role_name}
+            for user_id, role_id, role_name in incompatible_bindings
+        ],
+    }
+
+
+@auth.get("/users/import-template")
+async def download_user_import_template(
+    _current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_permission(db, _current_user, "user.create")
+    return StreamingResponse(
+        BytesIO(create_user_import_template()),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="openzetc-user-import-template.xlsx"'},
+    )
+
+
+async def _read_and_validate_import(
+    file: UploadFile,
+    current_user: User,
+    db: AsyncSession,
+) -> tuple[dict, list[dict]]:
+    permission_scope = await require_permission(db, current_user, "user.create")
+    content = await file.read()
+    return await validate_user_import(
+        db,
+        content,
+        file.filename,
+        current_user=current_user,
+        permission_scope=permission_scope,
+    )
+
+
+@auth.post("/users/import/preview")
+async def preview_user_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    summary, rows = await _read_and_validate_import(file, current_user, db)
+    return {"summary": summary, "rows": public_import_rows(rows)}
+
+
+@auth.post("/users/import")
+async def import_users(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    summary, rows = await _read_and_validate_import(file, current_user, db)
+    if summary["invalid"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "导入数据校验失败", "summary": summary, "rows": public_import_rows(rows)},
+        )
+    created_users: list[User] = []
+    for row in rows:
+        user = User(
+            uid=row["uid"],
+            username=row["username"],
+            phone_number=row["phone_number"],
+            password_hash=AuthUtils.hash_password(row["_password"]),
+            role="user",
+            department_id=row["department_id"],
+        )
+        db.add(user)
+        created_users.append(user)
+    await db.flush()
+    for user, row in zip(created_users, rows, strict=True):
+        await update_users_roles(db, current_user, [user], row["role_ids"])
+    ip_address = request.client.host if request.client else None
+    db.add(
+        OperationLog(
+            user_id=current_user.id,
+            operation="批量导入用户",
+            details=f"成功创建 {len(created_users)} 名用户",
+            ip_address=ip_address,
+        )
+    )
+    await db.commit()
+    return {
+        "created_count": len(created_users),
+        "user_ids": [user.id for user in created_users],
+        "summary": summary,
+        "rows": public_import_rows(rows),
+    }
 
 
 @auth.post("/users", response_model=UserResponse)

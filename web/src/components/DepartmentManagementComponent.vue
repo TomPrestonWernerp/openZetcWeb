@@ -46,15 +46,29 @@
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
-                <div class="department-name">
-                  <span class="name-text">{{ record.name }}</span>
-                </div>
+                <button
+                  v-if="canViewDepartmentMembers(record)"
+                  class="department-link"
+                  type="button"
+                  @click="openMemberDrawer(record)"
+                >
+                  {{ record.name }}
+                </button>
+                <strong v-else>{{ record.name }}</strong>
               </template>
               <template v-if="column.key === 'description'">
                 <span class="description-text">{{ record.description || '-' }}</span>
               </template>
               <template v-if="column.key === 'userCount'">
-                <span>{{ record.user_count ?? 0 }} 人</span>
+                <a-button
+                  v-if="canViewDepartmentMembers(record)"
+                  type="link"
+                  class="member-count"
+                  @click="openMemberDrawer(record)"
+                >
+                  {{ record.user_count ?? 0 }} 人
+                </a-button>
+                <span v-else>{{ record.user_count ?? 0 }} 人</span>
               </template>
               <template v-if="column.key === 'action'">
                 <a-space>
@@ -179,18 +193,136 @@
         </template>
       </a-form>
     </a-modal>
+
+    <a-drawer
+      v-model:open="memberDrawer.open"
+      :title="`${memberDrawer.department?.name || ''} · 部门成员`"
+      width="min(720px, 92vw)"
+      :destroy-on-close="true"
+      class="member-drawer"
+    >
+      <div class="member-summary">
+        <div>
+          <strong>{{ memberDrawer.members.length }} 位成员</strong>
+          <span>选择成员后可统一调整所属部门</span>
+        </div>
+        <a-button size="small" :loading="memberDrawer.loading" @click="loadDepartmentMembers">
+          刷新
+        </a-button>
+      </div>
+
+      <a-alert
+        v-if="memberDrawer.error"
+        type="error"
+        :message="memberDrawer.error"
+        show-icon
+        class="member-error"
+      />
+
+      <a-table
+        :data-source="memberDrawer.members"
+        :columns="memberColumns"
+        :row-key="(record) => record.id"
+        :row-selection="memberRowSelection"
+        :loading="memberDrawer.loading"
+        :pagination="{ pageSize: 8, hideOnSinglePage: true, showSizeChanger: false }"
+        :scroll="{ x: 520 }"
+        size="small"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'user'">
+            <div class="member-identity">
+              <strong>{{ record.username }}</strong>
+              <span>{{ record.uid }}</span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'role'">
+            {{ record.role_name || record.role || '普通用户' }}
+          </template>
+        </template>
+      </a-table>
+
+      <template #footer>
+        <div class="drawer-footer">
+          <span>已选择 {{ memberDrawer.selectedIds.length }} 人</span>
+          <div v-if="canMoveMembers" class="batch-move">
+            <a-select
+              v-model:value="memberDrawer.targetDepartmentId"
+              placeholder="选择目标部门"
+              :options="moveDepartmentOptions"
+              :disabled="!memberDrawer.selectedIds.length"
+            />
+            <a-button
+              type="primary"
+              :disabled="!canSubmitMemberMove"
+              :loading="memberDrawer.moving"
+              @click="moveSelectedMembers"
+            >
+              批量移动
+            </a-button>
+          </div>
+          <a-button
+            v-if="canAssignMemberRoles"
+            :disabled="!memberDrawer.selectedIds.length"
+            @click="openMemberRoleModal"
+          >
+            批量设置角色
+          </a-button>
+        </div>
+      </template>
+    </a-drawer>
+
+    <a-modal
+      v-model:open="memberRoleModal.open"
+      title="批量设置成员角色"
+      :confirm-loading="memberRoleModal.saving"
+      :ok-button-props="{ disabled: !memberRoleModal.roleIds.length || memberRoleModal.loading }"
+      @ok="saveMemberRoles"
+    >
+      <a-alert
+        type="info"
+        show-icon
+        :message="`将对已选择的 ${memberDrawer.selectedIds.length} 位成员生效`"
+        class="member-role-hint"
+      />
+      <a-spin :spinning="memberRoleModal.loading">
+        <a-form layout="vertical">
+          <a-form-item label="处理方式">
+            <a-radio-group v-model:value="memberRoleModal.mode" button-style="solid">
+              <a-radio-button value="add">增加角色</a-radio-button>
+              <a-radio-button value="remove">移除角色</a-radio-button>
+              <a-radio-button value="replace">覆盖角色</a-radio-button>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item label="选择角色" required>
+            <a-select
+              v-model:value="memberRoleModal.roleIds"
+              mode="multiple"
+              placeholder="选择一个或多个角色"
+              :options="memberRoleOptions"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { reactive, onMounted, watch } from 'vue'
+import { computed, reactive, onMounted, watch } from 'vue'
 import { notification, message, Modal } from 'ant-design-vue'
-import { apiGet, departmentApi } from '@/apis'
+import { apiGet, departmentApi, rbacApi } from '@/apis'
 import { useUserStore } from '@/stores/user'
 import { Plus, RefreshCw, SquarePen, Trash2 } from 'lucide-vue-next'
 import { isPasswordLongEnough, MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
 
 const userStore = useUserStore()
+
+const memberColumns = [
+  { title: '用户', key: 'user', width: 210 },
+  { title: '手机号', dataIndex: 'phone_number', key: 'phone', width: 150 },
+  { title: '角色', key: 'role', width: 120 }
+]
 
 // 表格列定义
 const columns = [
@@ -242,6 +374,140 @@ const departmentManagement = reactive({
     phoneError: ''
   }
 })
+
+const memberDrawer = reactive({
+  open: false,
+  department: null,
+  members: [],
+  selectedIds: [],
+  targetDepartmentId: null,
+  loading: false,
+  moving: false,
+  error: null
+})
+const memberRoleModal = reactive({
+  open: false,
+  loading: false,
+  saving: false,
+  roles: [],
+  roleIds: [],
+  mode: 'add'
+})
+
+const canMoveMembers = computed(() => userStore.hasPermission('user.update', 'global'))
+const canAssignMemberRoles = computed(
+  () => userStore.hasPermission('role.assign') && userStore.hasPermission('user.assign_role')
+)
+const moveDepartmentOptions = computed(() =>
+  departmentManagement.departments
+    .filter((item) => Number(item.id) !== Number(memberDrawer.department?.id))
+    .map((item) => ({ value: Number(item.id), label: item.name }))
+)
+const canSubmitMemberMove = computed(
+  () => memberDrawer.selectedIds.length > 0 && Boolean(memberDrawer.targetDepartmentId)
+)
+const memberRowSelection = computed(() => ({
+  selectedRowKeys: memberDrawer.selectedIds,
+  onChange: (keys) => {
+    memberDrawer.selectedIds = keys
+  },
+  getCheckboxProps: () => ({ disabled: !canMoveMembers.value && !canAssignMemberRoles.value })
+}))
+const memberRoleOptions = computed(() =>
+  memberRoleModal.roles
+    .filter(
+      (role) =>
+        role.code !== 'system.superadmin' &&
+        (!role.department_id || Number(role.department_id) === Number(memberDrawer.department?.id))
+    )
+    .map((role) => ({ value: Number(role.id), label: role.name }))
+)
+const canViewDepartmentMembers = (department) => {
+  if (!userStore.hasPermission('department.view', 'department')) return false
+  if (!userStore.hasPermission('user.view', 'department')) return false
+  if (
+    userStore.hasPermission('department.view', 'global') &&
+    userStore.hasPermission('user.view', 'global')
+  ) {
+    return true
+  }
+  return Number(department.id) === Number(userStore.departmentId)
+}
+
+const loadDepartmentMembers = async () => {
+  if (!memberDrawer.department) return
+  memberDrawer.loading = true
+  memberDrawer.error = null
+  try {
+    const result = await departmentApi.getDepartmentUsers(memberDrawer.department.id)
+    memberDrawer.members = Array.isArray(result) ? result : result?.items || result?.users || []
+    memberDrawer.selectedIds = []
+  } catch (error) {
+    memberDrawer.error = error.message || '加载部门成员失败'
+    message.error(memberDrawer.error)
+  } finally {
+    memberDrawer.loading = false
+  }
+}
+
+const openMemberDrawer = (department) => {
+  memberDrawer.department = department
+  memberDrawer.members = []
+  memberDrawer.selectedIds = []
+  memberDrawer.targetDepartmentId = null
+  memberDrawer.open = true
+  loadDepartmentMembers()
+}
+
+const moveSelectedMembers = async () => {
+  memberDrawer.moving = true
+  try {
+    await departmentApi.batchUpdateUserDepartment(
+      memberDrawer.selectedIds,
+      memberDrawer.targetDepartmentId
+    )
+    message.success(`已移动 ${memberDrawer.selectedIds.length} 位成员`)
+    await Promise.all([loadDepartmentMembers(), fetchDepartments()])
+    memberDrawer.targetDepartmentId = null
+  } catch (error) {
+    message.error(error.message || '批量移动成员失败')
+  } finally {
+    memberDrawer.moving = false
+  }
+}
+
+const openMemberRoleModal = async () => {
+  memberRoleModal.open = true
+  memberRoleModal.loading = true
+  memberRoleModal.roleIds = []
+  memberRoleModal.mode = 'add'
+  try {
+    memberRoleModal.roles = await rbacApi.getRoles()
+  } catch (error) {
+    memberRoleModal.open = false
+    message.error(error.message || '加载角色列表失败')
+  } finally {
+    memberRoleModal.loading = false
+  }
+}
+
+const saveMemberRoles = async () => {
+  memberRoleModal.saving = true
+  try {
+    await rbacApi.updateUsersRoles(
+      memberDrawer.selectedIds,
+      memberRoleModal.roleIds,
+      memberRoleModal.mode
+    )
+    memberRoleModal.open = false
+    message.success(`已更新 ${memberDrawer.selectedIds.length} 位成员的角色`)
+    await loadDepartmentMembers()
+  } catch (error) {
+    message.error(error.message || '批量设置成员角色失败')
+  } finally {
+    memberRoleModal.saving = false
+  }
+}
 
 // 获取部门列表
 const fetchDepartments = async () => {
@@ -374,53 +640,53 @@ const handleDepartmentFormSubmit = async () => {
       return
     }
 
-    // 验证管理员UID
-    const adminUid = departmentManagement.form.adminUid.trim()
-    if (!adminUid) {
-      notification.error({ message: '请输入管理员UID' })
-      return
-    }
+    if (!departmentManagement.editMode) {
+      // 新建部门时才需要校验并创建管理员
+      const adminUid = departmentManagement.form.adminUid.trim()
+      if (!adminUid) {
+        notification.error({ message: '请输入管理员UID' })
+        return
+      }
 
-    if (!/^[a-zA-Z0-9_]+$/.test(adminUid)) {
-      notification.error({ message: 'UID只能包含字母、数字和下划线' })
-      return
-    }
+      if (!/^[a-zA-Z0-9_]+$/.test(adminUid)) {
+        notification.error({ message: 'UID只能包含字母、数字和下划线' })
+        return
+      }
 
-    if (adminUid.length < 3 || adminUid.length > 20) {
-      notification.error({ message: 'UID长度必须在3-20个字符之间' })
-      return
-    }
+      if (adminUid.length < 3 || adminUid.length > 20) {
+        notification.error({ message: 'UID长度必须在3-20个字符之间' })
+        return
+      }
 
-    if (departmentManagement.form.uidError) {
-      notification.error({ message: '管理员UID已存在或格式错误' })
-      return
-    }
+      if (departmentManagement.form.uidError) {
+        notification.error({ message: '管理员UID已存在或格式错误' })
+        return
+      }
 
-    // 验证密码
-    if (!departmentManagement.form.adminPassword) {
-      notification.error({ message: '请输入管理员密码' })
-      return
-    }
+      if (!departmentManagement.form.adminPassword) {
+        notification.error({ message: '请输入管理员密码' })
+        return
+      }
 
-    if (!isPasswordLongEnough(departmentManagement.form.adminPassword)) {
-      notification.error({ message: `密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符` })
-      return
-    }
+      if (!isPasswordLongEnough(departmentManagement.form.adminPassword)) {
+        notification.error({ message: `密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符` })
+        return
+      }
 
-    if (
-      departmentManagement.form.adminPassword !== departmentManagement.form.adminConfirmPassword
-    ) {
-      notification.error({ message: '两次输入的密码不一致' })
-      return
-    }
+      if (
+        departmentManagement.form.adminPassword !== departmentManagement.form.adminConfirmPassword
+      ) {
+        notification.error({ message: '两次输入的密码不一致' })
+        return
+      }
 
-    // 验证手机号
-    if (
-      departmentManagement.form.adminPhone &&
-      !validatePhoneNumber(departmentManagement.form.adminPhone)
-    ) {
-      notification.error({ message: '请输入正确的手机号格式' })
-      return
+      if (
+        departmentManagement.form.adminPhone &&
+        !validatePhoneNumber(departmentManagement.form.adminPhone)
+      ) {
+        notification.error({ message: '请输入正确的手机号格式' })
+        return
+      }
     }
 
     departmentManagement.loading = true
@@ -434,6 +700,7 @@ const handleDepartmentFormSubmit = async () => {
       notification.success({ message: '部门更新成功' })
     } else {
       // 创建部门，同时创建管理员
+      const adminUid = departmentManagement.form.adminUid.trim()
       await departmentApi.createDepartment({
         name: departmentManagement.form.name.trim(),
         description: departmentManagement.form.description.trim() || undefined,
@@ -570,11 +837,23 @@ onMounted(() => {
         padding: 8px 12px;
       }
 
-      .department-name {
-        .name-text {
-          font-weight: 500;
-          color: var(--gray-900);
+      .department-link {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--main-600);
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+
+        &:hover {
+          color: var(--color-primary-500);
         }
+      }
+
+      .member-count {
+        height: auto;
+        padding: 0;
       }
 
       .description-text {
@@ -590,6 +869,77 @@ onMounted(() => {
           background: var(--gray-25);
         }
       }
+    }
+  }
+}
+
+.member-summary,
+.drawer-footer,
+.batch-move {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.member-summary {
+  margin-bottom: 14px;
+
+  > div {
+    display: grid;
+    gap: 3px;
+  }
+
+  span {
+    color: var(--gray-500);
+    font-size: 12px;
+  }
+}
+
+.member-error,
+.member-role-hint {
+  margin-bottom: 14px;
+}
+
+.member-identity {
+  display: grid;
+  min-width: 0;
+
+  span {
+    color: var(--gray-500);
+    font-size: 12px;
+  }
+}
+
+.drawer-footer {
+  flex-wrap: wrap;
+
+  > span {
+    color: var(--gray-600);
+  }
+}
+
+.batch-move {
+  margin-left: auto;
+
+  .ant-select {
+    width: 180px;
+  }
+}
+
+@media (max-width: 720px) {
+  .drawer-footer,
+  .batch-move {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .batch-move {
+    width: 100%;
+    margin-left: 0;
+
+    .ant-select {
+      width: 100%;
     }
   }
 }

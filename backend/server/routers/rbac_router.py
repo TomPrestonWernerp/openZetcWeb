@@ -6,12 +6,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
 from yuxi.services.rbac_service import (
-    BUILTIN_ROLE_DEFINITIONS,
     SCOPE_RANK,
     get_user_permission_map,
     get_user_roles,
@@ -19,6 +18,7 @@ from yuxi.services.rbac_service import (
     replace_role_permissions,
     require_permission,
     serialize_role,
+    update_users_roles,
 )
 from yuxi.storage.postgres.models_business import (
     Department,
@@ -47,6 +47,11 @@ class RoleUpdate(BaseModel):
 
 class UserRolesUpdate(BaseModel):
     role_ids: list[int] = Field(min_length=1)
+
+
+class BatchUserRolesUpdate(UserRolesUpdate):
+    user_ids: list[int] = Field(min_length=1)
+    mode: Literal["add", "remove", "replace"] = "replace"
 
 
 async def _get_role_or_404(db: AsyncSession, role_id: int) -> RBACRole:
@@ -253,6 +258,34 @@ async def delete_role(
     return {"success": True}
 
 
+@rbac.put("/users/batch/roles")
+async def update_batch_user_roles(
+    data: BatchUserRolesUpdate,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_ids = list(dict.fromkeys(data.user_ids))
+    result = await db.execute(select(User).where(User.id.in_(user_ids), User.is_deleted == 0))
+    users_by_id = {user.id: user for user in result.scalars().all()}
+    if len(users_by_id) != len(user_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="包含不存在的用户")
+    targets = [users_by_id[user_id] for user_id in user_ids]
+    roles_by_user = await update_users_roles(db, current_user, targets, data.role_ids, data.mode)
+    await db.commit()
+    return {
+        "updated_count": len(targets),
+        "user_ids": user_ids,
+        "mode": data.mode,
+        "users": [
+            {
+                "user_id": target.id,
+                "roles": [await serialize_role(db, role) for role in roles_by_user[target.id]],
+            }
+            for target in targets
+        ],
+    }
+
+
 @rbac.get("/users/{user_id}/roles")
 async def list_user_roles(
     user_id: int,
@@ -278,50 +311,6 @@ async def update_user_roles(
     db: AsyncSession = Depends(get_db),
 ):
     target = await _get_user_or_404(db, user_id)
-    await require_permission(
-        db,
-        current_user,
-        "user.assign_role",
-        department_id=target.department_id,
-        target_user_id=target.id,
-    )
-    await require_permission(
-        db,
-        current_user,
-        "role.assign",
-        department_id=target.department_id,
-        target_user_id=target.id,
-    )
-    result = await db.execute(select(RBACRole).where(RBACRole.id.in_(data.role_ids)))
-    roles = list(result.scalars().all())
-    if len(roles) != len(set(data.role_ids)):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="包含不存在的角色")
-    for role in roles:
-        if role.department_id is not None and role.department_id != target.department_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能分配其他部门的角色")
-        if role.department_id is None and not role.is_system:
-            assignment_scope = await require_permission(db, current_user, "role.assign")
-            if assignment_scope != "global":
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能分配公司级自定义角色")
-        if role.code == BUILTIN_ROLE_DEFINITIONS["superadmin"]["code"] and current_user.role != "superadmin":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有超级管理员可分配超级管理员角色")
-
-    await db.execute(delete(RBACUserRole).where(RBACUserRole.user_id == target.id))
-    for role in roles:
-        db.add(
-            RBACUserRole(
-                user_id=target.id,
-                role_id=role.id,
-                assigned_by_user_id=current_user.id,
-            )
-        )
-    system_codes = {item["code"]: legacy for legacy, item in BUILTIN_ROLE_DEFINITIONS.items()}
-    selected_legacy = [system_codes[role.code] for role in roles if role.code in system_codes]
-    if "superadmin" in selected_legacy:
-        target.role = "superadmin"
-    elif "admin" in selected_legacy:
-        target.role = "admin"
-    else:
-        target.role = "user"
+    roles = (await update_users_roles(db, current_user, [target], data.role_ids))[target.id]
     await db.commit()
     return [await serialize_role(db, role) for role in roles]

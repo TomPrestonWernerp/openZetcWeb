@@ -16,6 +16,7 @@ export * from './skill_api' // Skills API
 export * from './tool_api' // 工具 API
 export * from './mention_api' // 提及搜索 API
 export * from './user_api' // 用户资源 API
+export * from './user_admin_api' // 用户批量管理与导入 API
 export * from './user_config_api' // 用户配置 API
 export * from './resource_submission_api' // 本地资源投稿与部门审核 API
 

@@ -3,11 +3,12 @@
     v-model:open="visible"
     :title="null"
     width="90%"
-    :style="{ maxWidth: '980px', minWidth: '320px', top: '10%' }"
+    :style="modalStyle"
     :footer="null"
     :closable="false"
     @cancel="handleClose"
     class="settings-modal"
+    :class="{ 'settings-modal-wide': isManagementTab }"
     :destroyOnClose="true"
     :bodyStyle="{ padding: 0 }"
   >
@@ -193,10 +194,7 @@
             <ResourceSubmissionReviewComponent />
           </div>
 
-          <div
-            v-show="activeTab === 'department'"
-            v-if="userStore.canManageDepartments"
-          >
+          <div v-show="activeTab === 'department'" v-if="userStore.canManageDepartments">
             <DepartmentManagementComponent />
           </div>
         </div>
@@ -249,6 +247,16 @@ const visible = computed({
   set: (value) => emit('update:visible', value)
 })
 
+const isManagementTab = computed(() =>
+  ['user', 'rolePermissions', 'department'].includes(activeTab.value)
+)
+
+const modalStyle = computed(() => ({
+  maxWidth: isManagementTab.value ? '1320px' : '980px',
+  minWidth: '320px',
+  top: isManagementTab.value ? '4%' : '10%'
+}))
+
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
@@ -265,9 +273,8 @@ const setActiveTab = (preferredTab) => {
     activeTab.value = preferredTab
     return
   }
-  activeTab.value = userStore.isAdmin && availableTabs.value.includes('base')
-    ? 'base'
-    : availableTabs.value[0]
+  activeTab.value =
+    userStore.isAdmin && availableTabs.value.includes('base') ? 'base' : availableTabs.value[0]
 }
 
 const handleClose = () => {
@@ -297,6 +304,17 @@ watch(
 
   .ant-modal-body {
     padding: 0;
+  }
+}
+
+.settings-modal-wide.ant-modal {
+  .settings-container {
+    height: 82vh;
+
+    @media (max-width: 900px) {
+      height: auto;
+      min-height: 70vh;
+    }
   }
 }
 

@@ -69,8 +69,8 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
           console.error('422验证错误详情:', {
             url,
             requestMethod: requestOptions.method,
-            requestHeaders: requestOptions.headers,
-            requestBody: requestOptions.body,
+            // 认证头、密码和导入文件都不能写入浏览器日志。
+            requestBody: requestOptions.body instanceof FormData ? '[FormData omitted]' : '[omitted]',
             responseData: errorData
           })
         }
