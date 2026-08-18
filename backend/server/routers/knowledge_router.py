@@ -40,6 +40,7 @@ from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limi
 
 from server.utils.auth_middleware import get_admin_user, get_required_user
 from server.utils.knowledge_permissions import (
+    ensure_knowledge_access,
     ensure_knowledge_manage,
     get_knowledge_access_user,
     get_knowledge_create_user,
@@ -1633,26 +1634,10 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
 
 
 async def _ensure_knowledge_query_access(current_user: User, kb_id: str, db: AsyncSession) -> None:
-    allowed = await knowledge_base.check_accessible(
-        {
-            "uid": current_user.uid,
-            "role": current_user.role,
-            "department_id": current_user.department_id,
-        },
-        kb_id,
-    )
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Access denied")
-    database = await knowledge_base.get_database_info(kb_id)
-    if database is None:
-        raise HTTPException(status_code=404, detail="知识库不存在")
-    await require_permission(
-        db,
-        current_user,
-        "knowledge.query",
-        owner_uid=database.get("created_by"),
-        department_id=database.get("department_id"),
-    )
+    await ensure_knowledge_access(current_user, kb_id, db)
+    # ensure_knowledge_access 已按共享范围或本部门管理权确认资源边界；检索权限
+    # 在这里不应再次按资源创建部门收窄。
+    await require_permission(db, current_user, "knowledge.query")
 
 
 @knowledge.post("/databases/{kb_id}/query")

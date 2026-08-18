@@ -14,36 +14,16 @@ async def ensure_knowledge_access(user: User, kb_id: str, db: AsyncSession | Non
     if database is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
     share_accessible = await knowledge_base.check_accessible(user.to_dict(), kb_id)
-    if db is None:
-        from yuxi.storage.postgres.manager import pg_manager
 
-        async with pg_manager.get_async_session_context() as session:
-            can_view = share_accessible and await has_permission(
-                session,
-                user,
-                "knowledge.view",
-                owner_uid=database.get("created_by"),
-                department_id=database.get("department_id"),
-            )
-            can_manage = await has_permission(
-                session,
-                user,
-                "knowledge.update",
-                owner_uid=database.get("created_by"),
-                department_id=database.get("department_id"),
-            )
-            if not can_view and not can_manage:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该知识库")
-    else:
-        can_view = share_accessible and await has_permission(
-            db,
-            user,
-            "knowledge.view",
-            owner_uid=database.get("created_by"),
-            department_id=database.get("department_id"),
-        )
+    async def check_access(session: AsyncSession) -> None:
+        # 资源是否向当前用户开放由 share_config 决定；RBAC 的 view scope 只决定
+        # 用户是否具备查看能力，不能再拿资源创建部门重复收窄，否则全局共享、
+        # 跨部门共享的知识库会出现在列表中却无法打开。
+        can_view = share_accessible and await has_permission(session, user, "knowledge.view")
+        # 管理权限仍按资源所有者和归属部门判定，因此部门管理员可以管理本部门
+        # 的私有知识库，但不能借助共享关系编辑其他部门的知识库。
         can_manage = await has_permission(
-            db,
+            session,
             user,
             "knowledge.update",
             owner_uid=database.get("created_by"),
@@ -51,6 +31,14 @@ async def ensure_knowledge_access(user: User, kb_id: str, db: AsyncSession | Non
         )
         if not can_view and not can_manage:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该知识库")
+
+    if db is None:
+        from yuxi.storage.postgres.manager import pg_manager
+
+        async with pg_manager.get_async_session_context() as session:
+            await check_access(session)
+    else:
+        await check_access(db)
     return database
 
 
@@ -92,16 +80,12 @@ async def get_knowledge_access_user(
 ) -> User:
     kb_id = request.path_params.get("kb_id")
     if kb_id:
-        permission_code = "knowledge.query" if "/query" in request.url.path else "knowledge.view"
-        database = await ensure_knowledge_access(current_user, kb_id, db)
-        if permission_code != "knowledge.view":
-            await require_permission(
-                db,
-                current_user,
-                permission_code,
-                owner_uid=database.get("created_by"),
-                department_id=database.get("department_id"),
-            )
+        path = request.url.path.rstrip("/")
+        is_query_operation = path.endswith("/query") or path.endswith("/query-test")
+        await ensure_knowledge_access(current_user, kb_id, db)
+        if is_query_operation:
+            # 分享范围已经完成资源边界校验；此处只确认用户具备检索能力。
+            await require_permission(db, current_user, "knowledge.query")
     return current_user
 
 

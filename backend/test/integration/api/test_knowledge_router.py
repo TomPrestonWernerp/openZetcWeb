@@ -550,6 +550,20 @@ async def test_department_share_config_filters_accessible_databases(test_client,
 
         assert database["kb_id"] in await _accessible_kb_ids(test_client, user_a["headers"])
         assert database["kb_id"] not in await _accessible_kb_ids(test_client, user_b["headers"])
+
+        detail_response = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}", headers=user_a["headers"]
+        )
+        assert detail_response.status_code == 200, detail_response.text
+        params_response = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}/query-params", headers=user_a["headers"]
+        )
+        assert params_response.status_code == 200, params_response.text
+
+        denied_detail = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}", headers=user_b["headers"]
+        )
+        assert denied_detail.status_code == 403, denied_detail.text
     finally:
         if database:
             await test_client.delete(f"/api/knowledge/databases/{database['kb_id']}", headers=admin_headers)
@@ -582,6 +596,20 @@ async def test_user_share_config_filters_accessible_databases(test_client, admin
 
         assert database["kb_id"] in await _accessible_kb_ids(test_client, user_a["headers"])
         assert database["kb_id"] not in await _accessible_kb_ids(test_client, user_b["headers"])
+
+        detail_response = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}", headers=user_a["headers"]
+        )
+        assert detail_response.status_code == 200, detail_response.text
+        params_response = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}/query-params", headers=user_a["headers"]
+        )
+        assert params_response.status_code == 200, params_response.text
+
+        denied_detail = await test_client.get(
+            f"/api/knowledge/databases/{database['kb_id']}", headers=user_b["headers"]
+        )
+        assert denied_detail.status_code == 403, denied_detail.text
     finally:
         if database:
             await test_client.delete(f"/api/knowledge/databases/{database['kb_id']}", headers=admin_headers)
