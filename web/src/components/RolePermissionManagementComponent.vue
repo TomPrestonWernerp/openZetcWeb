@@ -15,7 +15,7 @@
       type="info"
       show-icon
       message="权限范围说明"
-      description="本人：仅本人账号或本人创建的资源；本部门：覆盖本部门人员和资源；全公司：覆盖所有部门。多个角色的权限会自动合并。"
+      description="权限范围支持多选；本部门自动包含本人，全公司自动包含本部门和本人。选择“全部”可一次勾选当前可授权的所有范围。多个角色的权限会自动合并。"
     />
 
     <a-tabs v-model:active-key="activeTab" class="access-tabs">
@@ -109,12 +109,21 @@
                       <p>{{ permission.description }}</p>
                     </div>
                     <a-select
-                      v-model:value="roleForm.permissions[permission.code]"
+                      :value="permissionScopeValues(permission.code)"
                       class="scope-select"
-                      :disabled="selectedRole.is_system || !canUpdateRole"
+                      mode="multiple"
+                      :max-tag-count="1"
+                      :max-tag-placeholder="scopeTagPlaceholder"
+                      :disabled="
+                        selectedRole.is_system ||
+                        !canUpdateRole ||
+                        !availablePermissionScopes(permission.code).length
+                      "
                       allow-clear
                       placeholder="不授权"
+                      @change="handlePermissionScopesChange(permission.code, $event)"
                     >
+                      <a-select-option value="__all__">全部</a-select-option>
                       <a-select-option v-if="canGrantScope(permission.code, 'own')" value="own">
                         本人
                       </a-select-option>
@@ -311,22 +320,24 @@ const createModalOpen = ref(false)
 const roleForm = reactive({ name: '', description: '', permissions: {} })
 const createForm = reactive({ name: '', description: '', department_id: null })
 
+const VISIBLE_PERMISSION_DOMAINS = new Set(['user', 'department', 'role', 'knowledge'])
+const PERMISSION_SCOPES = ['own', 'department', 'global']
+
 const domainLabels = {
   user: '人员管理',
   department: '部门管理',
   role: '角色与权限',
-  knowledge: '知识库',
-  agent: '智能体',
-  skill: 'Skill',
-  mcp: 'MCP'
+  knowledge: '知识库'
 }
 
 const groupedPermissions = computed(() => {
   const groups = new Map()
-  permissions.value.forEach((item) => {
-    if (!groups.has(item.domain)) groups.set(item.domain, [])
-    groups.get(item.domain).push(item)
-  })
+  permissions.value
+    .filter((item) => VISIBLE_PERMISSION_DOMAINS.has(item.domain))
+    .forEach((item) => {
+      if (!groups.has(item.domain)) groups.set(item.domain, [])
+      groups.get(item.domain).push(item)
+    })
   return [...groups.entries()].map(([code, items]) => ({ code, items }))
 })
 
@@ -405,6 +416,33 @@ const loadUsersWithRoles = async () => {
 const scopeRank = { own: 1, department: 2, global: 3 }
 const canGrantScope = (permissionCode, scope) =>
   (scopeRank[userStore.permissions?.[permissionCode]] || 0) >= scopeRank[scope]
+
+const availablePermissionScopes = (permissionCode) =>
+  PERMISSION_SCOPES.filter((scope) => canGrantScope(permissionCode, scope))
+
+const permissionScopeValues = (permissionCode) => {
+  const grantedScope = roleForm.permissions[permissionCode]
+  if (!grantedScope) return []
+  return PERMISSION_SCOPES.filter((scope) => scopeRank[scope] <= scopeRank[grantedScope])
+}
+
+const handlePermissionScopesChange = (permissionCode, selectedScopes) => {
+  const availableScopes = availablePermissionScopes(permissionCode)
+  const normalizedScopes = selectedScopes.includes('__all__')
+    ? availableScopes
+    : selectedScopes.filter((scope) => availableScopes.includes(scope))
+  const highestScope = [...normalizedScopes].sort(
+    (left, right) => scopeRank[right] - scopeRank[left]
+  )[0]
+
+  if (highestScope) {
+    roleForm.permissions[permissionCode] = highestScope
+  } else {
+    delete roleForm.permissions[permissionCode]
+  }
+}
+
+const scopeTagPlaceholder = (omittedValues) => `+${omittedValues.length}`
 
 const selectRole = (role) => {
   selectedRole.value = role
