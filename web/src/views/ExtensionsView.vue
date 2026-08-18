@@ -2,26 +2,15 @@
   <div class="extensions-view extension-page-root">
     <PageHeader
       v-if="!isDetailPage"
-      v-model:active-key="activeTab"
-      title="智能体扩展"
-      :tabs="extensionTabs"
+      title="知识库"
       :loading="activeChildLoading"
       :show-border="true"
-      aria-label="智能体扩展视图切换"
+      aria-label="知识库"
     />
 
     <div v-if="!isDetailPage" class="extensions-content">
-      <div v-if="activeTab === 'knowledge'" class="tab-panel">
+      <div class="tab-panel">
         <DataBaseView ref="knowledgeRef" embedded />
-      </div>
-      <div v-if="activeTab === 'tools'" class="tab-panel">
-        <ToolsCardList ref="toolsRef" />
-      </div>
-      <div v-if="activeTab === 'skills'" class="tab-panel">
-        <SkillCardList ref="skillsRef" />
-      </div>
-      <div v-if="activeTab === 'mcp'" class="tab-panel">
-        <McpCardList ref="mcpRef" />
       </div>
     </div>
 
@@ -30,85 +19,19 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import ToolsCardList from '@/components/extensions/ToolsCardList.vue'
-import McpCardList from '@/components/extensions/McpCardList.vue'
-import SkillCardList from '@/components/extensions/SkillCardList.vue'
+import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
 
 const route = useRoute()
-const router = useRouter()
-const activeTab = ref(null)
 const knowledgeRef = ref(null)
-const skillsRef = ref(null)
-const mcpRef = ref(null)
-const toolsRef = ref(null)
-
-const extensionTabs = [
-  { key: 'knowledge', label: '知识库' },
-  { key: 'tools', label: '工具' },
-  { key: 'mcp', label: 'MCP' },
-  { key: 'skills', label: 'Skills' }
-]
-const allowedTabKeys = computed(() => extensionTabs.map((tab) => tab.key))
-const defaultTabKey = computed(() => extensionTabs[0]?.key || 'skills')
-
-const normalizeTab = (tab) => {
-  if (allowedTabKeys.value.includes(tab)) return tab
-  return defaultTabKey.value
-}
-
-const replaceTabQuery = (tab) => {
-  const query = { ...route.query }
-  if (tab === defaultTabKey.value) {
-    delete query.tab
-  } else {
-    query.tab = tab
-  }
-  router.replace({ query })
-}
 
 const isDetailPage = computed(() => {
-  return (
-    route.path.startsWith('/extensions/knowledgebase/') ||
-    route.path.startsWith('/extensions/mcp/') ||
-    route.path.startsWith('/extensions/skill/')
-  )
+  return route.path.startsWith('/extensions/knowledgebase/')
 })
 
-const activeChildLoading = computed(() => {
-  const refMap = {
-    knowledge: knowledgeRef,
-    tools: toolsRef,
-    skills: skillsRef,
-    mcp: mcpRef
-  }
-  const child = refMap[activeTab.value]
-  return child?.value?.loading || false
-})
-
-watch(
-  () => route.query.tab,
-  (tab) => {
-    const nextTab = normalizeTab(tab)
-    if (activeTab.value !== nextTab) activeTab.value = nextTab
-    if (tab && tab !== nextTab) replaceTabQuery(nextTab)
-  },
-  { immediate: true }
-)
-
-watch(activeTab, (tab) => {
-  if (!tab) return
-  const nextTab = normalizeTab(tab)
-  if (nextTab !== tab) {
-    activeTab.value = nextTab
-    return
-  }
-  if (route.query.tab === nextTab || (!route.query.tab && nextTab === defaultTabKey.value)) return
-  replaceTabQuery(nextTab)
-})
+const activeChildLoading = computed(() => knowledgeRef.value?.loading || false)
 </script>
 
 <style scoped lang="less">

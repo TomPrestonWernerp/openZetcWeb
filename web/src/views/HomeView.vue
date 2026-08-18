@@ -49,8 +49,8 @@
               </p>
             </Transition>
             <div class="hero-actions reveal-up delay-2">
-              <button class="button-base primary" @click="goToChat">
-                <span>开始体验</span>
+              <button class="button-base primary" @click="goToKnowledgeBase">
+                <span>进入知识库</span>
                 <ArrowRight :size="18" />
               </button>
               <div ref="downloadMenuRef" class="download-entry">
@@ -70,7 +70,9 @@
                   <div class="download-menu-header">
                     <div>
                       <strong>下载 openZetcX 桌面端</strong>
-                      <span>{{ releaseVersion ? `最新版本 ${releaseVersion}` : '选择适合电脑的安装包' }}</span>
+                      <span>{{
+                        releaseVersion ? `最新版本 ${releaseVersion}` : '选择适合电脑的安装包'
+                      }}</span>
                     </div>
                     <span v-if="downloadLoading" class="download-loading">获取中</span>
                   </div>
@@ -85,7 +87,9 @@
                     >
                       <span class="download-option-icon"><MonitorDown :size="20" /></span>
                       <span class="download-option-copy">
-                        <strong>{{ recommendedPackage.label }} · {{ recommendedPackage.detail }}</strong>
+                        <strong
+                          >{{ recommendedPackage.label }} · {{ recommendedPackage.detail }}</strong
+                        >
                         <small>推荐用于这台电脑</small>
                       </span>
                       <span class="recommended-tag"><Check :size="13" /> 推荐</span>
@@ -121,7 +125,6 @@
                     前往发布页选择安装包
                     <ArrowRight :size="15" />
                   </a>
-
                 </div>
               </div>
             </div>
@@ -208,7 +211,6 @@
 
                 <p class="flow-caption">智能体发起检索 · 引擎融合向量与图谱 · 召回知识增强生成</p>
               </div>
-
             </div>
           </aside>
         </div>
@@ -354,14 +356,14 @@ const retryLoad = () => {
   loadData()
 }
 
-const goToChat = async () => {
+const goToKnowledgeBase = async () => {
   if (!userStore.isLoggedIn) {
     sessionStorage.setItem('redirect', '/')
     router.push('/login')
     return
   }
 
-  router.push('/agent')
+  router.push('/extensions')
 }
 
 const loadDesktopRelease = async () => {

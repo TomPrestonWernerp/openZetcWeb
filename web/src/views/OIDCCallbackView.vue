@@ -29,7 +29,6 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { useAgentStore } from '@/stores/agent'
 import { authApi } from '@/apis/auth_api'
 import { message } from 'ant-design-vue'
 import { clearAutoStartAttempt } from '@/utils/oidcAutoStart'
@@ -37,7 +36,6 @@ import { clearAutoStartAttempt } from '@/utils/oidcAutoStart'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
-const agentStore = useAgentStore()
 
 // 状态
 const loading = ref(true)
@@ -96,13 +94,7 @@ const handleCallback = async () => {
     setTimeout(async () => {
       // 跳转
       if (redirectPath === '/') {
-        try {
-          await agentStore.initialize()
-          router.push('/agent')
-        } catch (err) {
-          console.error('获取智能体信息失败:', err)
-          router.push('/agent')
-        }
+        router.push('/extensions')
       } else {
         router.push(redirectPath)
       }

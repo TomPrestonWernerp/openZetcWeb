@@ -1,21 +1,9 @@
 <script setup>
-import { ref, onMounted, computed, provide, watch } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import {
-  BarChart3,
-  ClipboardList,
-  LibraryBig,
-  Box,
-  FolderKanban,
-  PanelLeftClose,
-  PanelLeftOpen,
-  MessageCirclePlus,
-  Search
-} from 'lucide-vue-next'
+import { ref, onMounted, computed, provide } from 'vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { ClipboardList, LibraryBig, PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
-import { useAgentStore } from '@/stores/agent'
-import { useChatThreadsStore } from '@/stores/chatThreads'
 import { useChatUIStore } from '@/stores/chatUI'
 import { useDatabaseStore } from '@/stores/database'
 import { useInfoStore } from '@/stores/info'
@@ -23,43 +11,27 @@ import { useTaskerStore } from '@/stores/tasker'
 import { useUserStore } from '@/stores/user'
 import { storeToRefs } from 'pinia'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
-import DebugComponent from '@/components/DebugComponent.vue'
 import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
-import ConversationNavSection from '@/components/ConversationNavSection.vue'
-import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
 
 const configStore = useConfigStore()
-const agentStore = useAgentStore()
-const chatThreadsStore = useChatThreadsStore()
 const chatUIStore = useChatUIStore()
 const databaseStore = useDatabaseStore()
 const infoStore = useInfoStore()
 const taskerStore = useTaskerStore()
 const userStore = useUserStore()
 const { activeCount: activeCountRef, isDrawerOpen } = storeToRefs(taskerStore)
-const { threads, currentThreadId, hasMoreThreads, isLoadingMoreThreads } =
-  storeToRefs(chatThreadsStore)
-
-// Add state for debug modal
-const showDebugModal = ref(false)
 
 // Add state for settings modal
 const showSettingsModal = ref(false)
 const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
-const conversationSearchOpen = ref(false)
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
   settingsInitialTab.value = tab || (userStore.isAdmin ? 'base' : 'account')
   showSettingsModal.value = true
-}
-
-// Handle debug modal close
-const handleDebugModalClose = () => {
-  showDebugModal.value = false
 }
 
 const getRemoteConfig = async () => {
@@ -81,7 +53,6 @@ const getRemoteDatabase = async () => {
 onMounted(async () => {
   // 加载信息配置与知识库数据无依赖，可并行
   await Promise.all([infoStore.loadInfoConfig(), getRemoteDatabase()])
-  await initAgentNavigation()
   await getRemoteConfig()
   // 仅管理员加载任务中心数据
   if (userStore.isAdmin) {
@@ -90,62 +61,21 @@ onMounted(async () => {
 })
 
 const route = useRoute()
-const router = useRouter()
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
-const activeConversationThreadId = computed(() => {
-  return route.path.startsWith('/agent') ? currentThreadId.value : null
-})
 const organizationName = computed(() => {
   return infoStore.organization.name || infoStore.branding.name || 'openZetc'
 })
 
-// 下面是导航菜单部分，添加智能体项
-const mainList = computed(() => {
-  const items = [
-    {
-      name: '创建新对话',
-      path: '/agent',
-      icon: MessageCirclePlus,
-      activeIcon: MessageCirclePlus,
-      action: true,
-      exactActive: true
-    }
-  ]
-
-  items.push({
-    name: '工作区',
-    path: '/workspace',
-    icon: FolderKanban,
-    activeIcon: FolderKanban
-  })
-
-  items.push({
-    name: '智能体扩展',
+const mainList = computed(() => [
+  {
+    name: '知识库',
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,
     activeIcon: LibraryBig
-  })
-
-  items.push({
-    name: '智能体管理',
-    path: '/model-manage',
-    icon: Box,
-    activeIcon: Box
-  })
-
-  if (userStore.isSuperAdmin) {
-    items.push({
-      name: '数据总览',
-      path: '/dashboard',
-      icon: BarChart3,
-      activeIcon: BarChart3
-    })
   }
-
-  return items
-})
+])
 
 const primaryNavItem = computed(() => mainList.value[0] || null)
 const secondaryNavItems = computed(() => mainList.value.slice(1))
@@ -165,86 +95,6 @@ const setSidebarCollapsed = (collapsed) => {
 const toggleSidebar = () => {
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
-
-const openConversationSearch = () => {
-  conversationSearchOpen.value = true
-}
-
-const initAgentNavigation = async () => {
-  try {
-    if (!agentStore.isInitialized) {
-      await agentStore.initialize()
-    }
-    await chatThreadsStore.loadThreads()
-  } catch (error) {
-    console.warn('加载对话导航失败:', error)
-  }
-}
-
-const handleSelectChat = (threadId) => {
-  if (!threadId) return
-  chatThreadsStore.setCurrentThreadId(threadId)
-  router.push({ name: 'AgentCompWithThreadId', params: { thread_id: threadId } })
-}
-
-const handleSearchThreadFound = (thread) => {
-  chatThreadsStore.upsertThread(thread)
-}
-
-const handleSearchSelectThread = (thread) => {
-  if (!thread?.id) return
-  chatThreadsStore.upsertThread(thread)
-  handleSelectChat(thread.id)
-}
-
-const handleCreateConversationFromSearch = () => {
-  chatThreadsStore.setCurrentThreadId(null)
-  router.push({ name: 'AgentComp' })
-}
-
-const handleDeleteChat = async (threadId) => {
-  if (!threadId) return
-  try {
-    await chatThreadsStore.deleteThread(threadId)
-    if (route.params.thread_id === threadId) {
-      await router.replace({ name: 'AgentComp' })
-    }
-  } catch (error) {
-    console.warn('删除对话失败:', error)
-  }
-}
-
-const handleRenameChat = async ({ chatId, title }) => {
-  try {
-    await chatThreadsStore.updateThread(chatId, title)
-  } catch (error) {
-    console.warn('重命名对话失败:', error)
-  }
-}
-
-const handleTogglePinChat = async (threadId) => {
-  const thread = threads.value.find((item) => item.id === threadId)
-  if (!thread) return
-  try {
-    await chatThreadsStore.updateThread(threadId, null, !thread.is_pinned)
-    await chatThreadsStore.loadThreads()
-    if (currentThreadId.value) {
-      chatThreadsStore.setCurrentThreadId(currentThreadId.value)
-    }
-  } catch (error) {
-    console.warn('更新置顶状态失败:', error)
-  }
-}
-
-watch(
-  () => [route.path, route.params.thread_id],
-  () => {
-    if (!route.path.startsWith('/agent')) return
-    const threadId = typeof route.params.thread_id === 'string' ? route.params.thread_id : null
-    chatThreadsStore.setCurrentThreadId(threadId)
-  },
-  { immediate: true }
-)
 
 // Provide settings modal methods to child components
 provide('settingsModal', {
@@ -302,19 +152,6 @@ provide('settingsModal', {
           <span class="nav-text">{{ primaryNavItem.name }}</span>
         </RouterLink>
 
-        <button
-          type="button"
-          class="nav-item"
-          :class="{ active: conversationSearchOpen }"
-          @click.stop="openConversationSearch"
-        >
-          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>搜索对话</template>
-            <Search class="icon" size="18" />
-          </a-tooltip>
-          <span class="nav-text">搜索对话</span>
-        </button>
-
         <RouterLink
           v-for="(item, index) in secondaryNavItems"
           :key="index"
@@ -336,21 +173,7 @@ provide('settingsModal', {
           <span class="nav-text">{{ item.name }}</span>
         </RouterLink>
       </div>
-      <div class="fill">
-        <ConversationNavSection
-          v-if="!sidebarCollapsed"
-          class="sidebar-conversations"
-          :current-chat-id="activeConversationThreadId"
-          :chats-list="threads"
-          :has-more-chats="hasMoreThreads"
-          :is-loading-more="isLoadingMoreThreads"
-          @select-chat="handleSelectChat"
-          @delete-chat="handleDeleteChat"
-          @rename-chat="handleRenameChat"
-          @toggle-pin="handleTogglePinChat"
-          @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
-        />
-      </div>
+      <div class="fill"></div>
       <div class="foo">
         <!-- 用户信息组件 -->
         <div class="nav-item user-info" @click.stop>
@@ -386,27 +209,6 @@ provide('settingsModal', {
       <component :is="Component" v-else />
     </router-view>
 
-    <ConversationSearchModal
-      v-model:open="conversationSearchOpen"
-      :recent-threads="threads"
-      @select-thread="handleSearchSelectThread"
-      @create-thread="handleCreateConversationFromSearch"
-      @thread-found="handleSearchThreadFound"
-    />
-
-    <!-- Debug Modal -->
-    <a-modal
-      v-model:open="showDebugModal"
-      title="调试面板"
-      width="90%"
-      :footer="null"
-      @cancel="handleDebugModalClose"
-      :maskClosable="true"
-      :destroyOnClose="true"
-      class="debug-modal"
-    >
-      <DebugComponent />
-    </a-modal>
     <TaskCenterDrawer v-if="userStore.isAdmin" />
     <SettingsModal
       v-model:visible="showSettingsModal"

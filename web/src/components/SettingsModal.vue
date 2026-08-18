@@ -66,30 +66,12 @@
           </div>
           <div
             class="sider-item"
-            :class="{ activesec: activeTab === 'resourceReview' }"
-            @click="activeTab = 'resourceReview'"
-            v-if="userStore.canReviewResourceSubmissions"
-          >
-            <ClipboardCheck class="icon" :size="18" />
-            <span>资源审核</span>
-          </div>
-          <div
-            class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
             v-if="userStore.canManageDepartments"
           >
             <Users class="icon" :size="18" />
             <span>部门管理</span>
-          </div>
-          <div
-            class="sider-item"
-            :class="{ activesec: activeTab === 'agentEnv' }"
-            @click="activeTab = 'agentEnv'"
-            v-if="userStore.isLoggedIn"
-          >
-            <SquareTerminal class="icon" :size="18" />
-            <span>环境变量</span>
           </div>
         </div>
       </div>
@@ -111,14 +93,6 @@
           v-if="userStore.isLoggedIn"
         >
           API Keys
-        </div>
-        <div
-          class="nav-item"
-          :class="{ active: activeTab === 'agentEnv' }"
-          @click="activeTab = 'agentEnv'"
-          v-if="userStore.isLoggedIn"
-        >
-          沙盒环境变量
         </div>
         <div
           class="nav-item"
@@ -146,14 +120,6 @@
         </div>
         <div
           class="nav-item"
-          :class="{ active: activeTab === 'resourceReview' }"
-          @click="activeTab = 'resourceReview'"
-          v-if="userStore.canReviewResourceSubmissions"
-        >
-          资源审核
-        </div>
-        <div
-          class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
           v-if="userStore.canManageDepartments"
@@ -173,10 +139,6 @@
             <ApiKeyManagementComponent />
           </div>
 
-          <div v-if="activeTab === 'agentEnv' && userStore.isLoggedIn">
-            <AgentEnvSettingsCard />
-          </div>
-
           <div v-show="activeTab === 'base'" v-if="userStore.isAdmin">
             <BasicSettingsSection />
           </div>
@@ -187,10 +149,6 @@
 
           <div v-show="activeTab === 'rolePermissions'" v-if="userStore.canManageAccess">
             <RolePermissionManagementComponent />
-          </div>
-
-          <div v-if="activeTab === 'resourceReview' && userStore.canReviewResourceSubmissions">
-            <ResourceSubmissionReviewComponent />
           </div>
 
           <div v-show="activeTab === 'department'" v-if="userStore.canManageDepartments">
@@ -205,25 +163,13 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
-import {
-  CircleUser,
-  Settings,
-  Key,
-  SquareTerminal,
-  User,
-  Users,
-  ShieldCheck,
-  ClipboardCheck,
-  X
-} from 'lucide-vue-next'
+import { CircleUser, Settings, Key, User, Users, ShieldCheck, X } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
-import AgentEnvSettingsCard from '@/components/AgentEnvSettingsCard.vue'
 import BasicSettingsSection from '@/components/BasicSettingsSection.vue'
 import ApiKeyManagementComponent from '@/components/ApiKeyManagementComponent.vue'
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
 import RolePermissionManagementComponent from '@/components/RolePermissionManagementComponent.vue'
-import ResourceSubmissionReviewComponent from '@/components/ResourceSubmissionReviewComponent.vue'
 
 const props = defineProps({
   visible: {
@@ -254,11 +200,10 @@ const modalStyle = {
 
 const availableTabs = computed(() => {
   const tabs = []
-  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
+  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys')
   if (userStore.isAdmin) tabs.push('base')
   if (userStore.canManageUsers) tabs.push('user')
   if (userStore.canManageAccess) tabs.push('rolePermissions')
-  if (userStore.canReviewResourceSubmissions) tabs.push('resourceReview')
   if (userStore.canManageDepartments) tabs.push('department')
   return tabs
 })
