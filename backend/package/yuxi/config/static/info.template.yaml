@@ -4,8 +4,8 @@
 # 组织信息
 organization:
   name: "openZetc"           # 完整组织名称
-  logo: "/openzetc-logo.png" # Logo文件路径（放在 web/public 目录下）
-  avatar: "/openzetc-logo.png" # 头像文件路径（放在 web/public 目录下）
+  logo: "/environment-technology-logo.png" # Logo文件路径（放在 web/public 目录下）
+  avatar: "/environment-technology-logo.png" # 头像文件路径（放在 web/public 目录下）
   login_bg: "/login-bg.jpg"  # 登录背景图片路径（放在 web/public 目录下）
 
 # 项目信息
