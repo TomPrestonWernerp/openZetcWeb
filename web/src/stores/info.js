@@ -32,7 +32,7 @@ export const useInfoStore = defineStore('info', () => {
 
   // 计算属性 - 页脚信息
   const footer = computed(() => ({
-    copyright: '',
+    copyright: '浙江省环境科技股份有限公司',
     user_agreement_url: '',
     privacy_policy_url: '',
     ...(infoConfig.value.footer || {})

@@ -217,7 +217,7 @@
       <footer class="footer">
         <div class="footer-content">
           <p class="copyright">
-            {{ infoStore.footer?.copyright || '© 2025 All rights reserved' }}
+            {{ infoStore.footer?.copyright || '浙江省环境科技股份有限公司' }}
           </p>
         </div>
       </footer>
