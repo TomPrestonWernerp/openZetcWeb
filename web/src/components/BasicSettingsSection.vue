@@ -106,6 +106,8 @@
           </div>
         </div>
       </template>
+
+      <InfrastructureSettingsSection v-if="userStore.isSuperAdmin" />
     </template>
 
     <!-- 服务链接部分 -->
@@ -187,6 +189,7 @@ import { Globe } from 'lucide-vue-next'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import RerankModelSelector from '@/components/RerankModelSelector.vue'
+import InfrastructureSettingsSection from '@/components/InfrastructureSettingsSection.vue'
 
 const configStore = useConfigStore()
 const userStore = useUserStore()

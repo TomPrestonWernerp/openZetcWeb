@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from server.routers.system_router import system
+from server.utils.auth_middleware import get_superadmin_user
 
 pytestmark = pytest.mark.unit
 
@@ -60,3 +63,99 @@ files:
         "openZetcX-0.6.0-macOS-x64.dmg",
     ]
     assert all("/releases/latest/download/" in asset["browser_download_url"] for asset in payload["assets"])
+
+
+def test_infrastructure_config_endpoint_uses_superadmin_service(monkeypatch):
+    expected = {
+        "object_storage": {"provider": "minio", "secret_key": "********"},
+        "vector_database": {"provider": "milvus", "token": ""},
+        "graph_database": {"provider": "neo4j", "password": "********"},
+    }
+    async def get_expected_config():
+        return expected
+
+    monkeypatch.setattr(
+        "yuxi.services.infrastructure_config_service.get_infrastructure_config",
+        get_expected_config,
+    )
+
+    app = FastAPI()
+    app.include_router(system, prefix="/api")
+    app.dependency_overrides[get_superadmin_user] = lambda: object()
+    response = TestClient(app).get("/api/system/infrastructure-config")
+
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_infrastructure_config_endpoint_rejects_non_superadmin():
+    def reject_non_superadmin():
+        raise HTTPException(status_code=403, detail="需要超级管理员权限")
+
+    app = FastAPI()
+    app.include_router(system, prefix="/api")
+    app.dependency_overrides[get_superadmin_user] = reject_non_superadmin
+    response = TestClient(app).get("/api/system/infrastructure-config")
+
+    assert response.status_code == 403
+
+
+def test_infrastructure_source_save_activate_and_delete_endpoints(monkeypatch):
+    calls = []
+
+    async def save_source(section, config_name, values, *, source_id=None, updated_by_uid=None):
+        calls.append(("save", section, config_name, source_id, updated_by_uid, values["provider"]))
+        return {"id": 12, "config_name": config_name, "is_active": False}
+
+    async def activate_source(section, source_id):
+        calls.append(("activate", section, source_id))
+        return {"section": section, "active_id": source_id}
+
+    async def delete_source(section, source_id):
+        calls.append(("delete", section, source_id))
+        return {"section": section, "deleted_id": source_id}
+
+    monkeypatch.setattr(
+        "yuxi.services.infrastructure_config_service.save_infrastructure_source",
+        save_source,
+    )
+    monkeypatch.setattr(
+        "yuxi.services.infrastructure_config_service.activate_infrastructure_source",
+        activate_source,
+    )
+    monkeypatch.setattr(
+        "yuxi.services.infrastructure_config_service.delete_infrastructure_source",
+        delete_source,
+    )
+
+    app = FastAPI()
+    app.include_router(system, prefix="/api")
+    app.dependency_overrides[get_superadmin_user] = lambda: SimpleNamespace(uid="superadmin-1")
+    client = TestClient(app)
+
+    save_response = client.post(
+        "/api/system/infrastructure-config/sources",
+        json={
+            "section": "object_storage",
+            "config_name": "生产 OSS",
+            "source_id": None,
+            "values": {"provider": "aliyun_oss"},
+        },
+    )
+    activate_response = client.post(
+        "/api/system/infrastructure-config/activate",
+        json={"section": "object_storage", "source_id": 12},
+    )
+    delete_response = client.post(
+        "/api/system/infrastructure-config/delete",
+        json={"section": "object_storage", "source_id": 12},
+    )
+
+    assert save_response.status_code == 200
+    assert activate_response.status_code == 200
+    assert delete_response.status_code == 200
+    assert calls == [
+        ("save", "object_storage", "生产 OSS", None, "superadmin-1", "aliyun_oss"),
+        ("activate", "object_storage", 12),
+        ("delete", "object_storage", 12),
+    ]

@@ -13,6 +13,7 @@ pytestmark = pytest.mark.asyncio
 async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, monkeypatch):
     source = tmp_path / "note.md"
     source.write_bytes(b"# workspace note\n")
+    object_storage = SimpleNamespace(KB_BUCKETS={"documents": "custom-documents"})
 
     async def fake_ensure_manage(*_args, **_kwargs):
         return {"kb_id": "db_1"}
@@ -32,7 +33,7 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
         return []
 
     async def fake_upload(bucket_name: str, file_name: str, data: bytes) -> str:
-        assert bucket_name == knowledge_router.MinIOClient.KB_BUCKETS["documents"]
+        assert bucket_name == object_storage.KB_BUCKETS["documents"]
         assert file_name.startswith("db_1/upload/note_")
         assert data == b"# workspace note\n"
         return f"http://minio/{bucket_name}/{file_name}"
@@ -44,6 +45,7 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
     )
     monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
     monkeypatch.setattr(knowledge_router, "resolve_workspace_file_path", lambda **_kwargs: source)
+    monkeypatch.setattr(knowledge_router, "get_minio_client", lambda: object_storage)
     monkeypatch.setattr(knowledge_router.knowledge_base, "file_existed_in_db", fake_file_existed_in_db)
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_same_name_files", fake_get_same_name_files)
     monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload)
@@ -57,9 +59,7 @@ async def test_import_workspace_files_uploads_workspace_file_to_minio(tmp_path, 
     assert result["status"] == "success"
     assert len(result["items"]) == 1
     item = result["items"][0]
-    assert item["file_path"].startswith(
-        f"http://minio/{knowledge_router.MinIOClient.KB_BUCKETS['documents']}/db_1/upload/note_"
-    )
+    assert item["file_path"].startswith(f"http://minio/{object_storage.KB_BUCKETS['documents']}/db_1/upload/note_")
     assert item["content_hash"]
     assert item["filename"] == "note.md"
     assert item["size"] == len(b"# workspace note\n")

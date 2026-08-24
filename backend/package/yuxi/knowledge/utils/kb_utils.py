@@ -228,9 +228,10 @@ def is_minio_url(file_path: str) -> bool:
     if len(path_parts) != 2:
         return False
 
-    from yuxi.storage.minio.client import MinIOClient
+    from yuxi.storage.minio.client import get_minio_client
 
-    known_buckets = set(MinIOClient.KB_BUCKETS.values()) | MinIOClient.PUBLIC_READ_BUCKETS
+    client = get_minio_client()
+    known_buckets = set(client.KB_BUCKETS.values()) | client.PUBLIC_READ_BUCKETS
     return path_parts[0] in known_buckets
 
 

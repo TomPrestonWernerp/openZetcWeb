@@ -1,4 +1,12 @@
-import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
+import {
+  apiGet,
+  apiAdminGet,
+  apiAdminPost,
+  apiAdminPut,
+  apiAdminDelete,
+  apiSuperAdminGet,
+  apiSuperAdminPost
+} from './base'
 
 /**
  * 系统管理API模块
@@ -54,6 +62,43 @@ export const configApi = {
       : '/api/system/logs'
     return apiAdminGet(url)
   }
+}
+
+export const infrastructureConfigApi = {
+  getConfig: async () => apiSuperAdminGet('/api/system/infrastructure-config'),
+
+  saveConfig: async (section, values) =>
+    apiSuperAdminPost('/api/system/infrastructure-config', { section, values }),
+
+  saveSource: async (section, configName, values, sourceId = null) =>
+    apiSuperAdminPost('/api/system/infrastructure-config/sources', {
+      section,
+      config_name: configName,
+      values,
+      source_id: sourceId
+    }),
+
+  activateSource: async (section, sourceId) =>
+    apiSuperAdminPost('/api/system/infrastructure-config/activate', {
+      section,
+      source_id: sourceId
+    }),
+
+  deleteSource: async (section, sourceId) =>
+    apiSuperAdminPost('/api/system/infrastructure-config/delete', {
+      section,
+      source_id: sourceId
+    }),
+
+  testConnection: async (section, values) =>
+    apiSuperAdminPost('/api/system/infrastructure-config/test', { section, values }),
+  revealSecret: async (section, field, source = null, sourceId = null) =>
+    apiSuperAdminPost('/api/system/infrastructure-config/reveal', {
+      section,
+      field,
+      source,
+      source_id: sourceId
+    })
 }
 
 // =============================================================================

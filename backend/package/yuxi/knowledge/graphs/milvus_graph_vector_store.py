@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from functools import partial
 from typing import Any
 
@@ -31,21 +30,35 @@ from yuxi.utils import hashstr, logger
 
 class MilvusGraphVectorStore:
     def __init__(self):
-        self.milvus_token = os.getenv("MILVUS_TOKEN") or ""
-        self.milvus_uri = os.getenv("MILVUS_URI") or "http://localhost:19530"
-        self.milvus_db = os.getenv("MILVUS_DB") or "yuxi"
-        self.connection_alias = f"milvus_graph_{hashstr(self.milvus_uri, 6)}"
+        self.milvus_token = ""
+        self.milvus_uri = ""
+        self.milvus_db = ""
+        self.connection_alias = ""
+        self._connection_signature = None
         self._init_connection()
 
     def _init_connection(self) -> None:
-        if not connections.has_connection(self.connection_alias):
-            connections.connect(alias=self.connection_alias, uri=self.milvus_uri, token=self.milvus_token)
+        from yuxi.config import config
+
+        settings = config.resolve_infrastructure_config("vector_database")
+        signature = (settings["uri"], settings["token"], settings["name"])
+        if signature == self._connection_signature and connections.has_connection(self.connection_alias):
+            return
+
+        if self.connection_alias and connections.has_connection(self.connection_alias):
+            connections.disconnect(self.connection_alias)
+        self.milvus_uri = str(settings["uri"] or "http://milvus:19530")
+        self.milvus_token = str(settings["token"] or "")
+        self.milvus_db = str(settings["name"] or "yuxi")
+        self.connection_alias = f"milvus_graph_{hashstr(f'{self.milvus_uri}:{self.milvus_db}', 10)}"
+        connections.connect(alias=self.connection_alias, uri=self.milvus_uri, token=self.milvus_token)
         try:
-            if self.milvus_db not in db.list_database():
-                db.create_database(self.milvus_db)
-            db.using_database(self.milvus_db)
+            if self.milvus_db not in db.list_database(using=self.connection_alias):
+                db.create_database(self.milvus_db, using=self.connection_alias)
+            db.using_database(self.milvus_db, using=self.connection_alias)
         except Exception as exc:
             logger.warning(f"Milvus graph database operation failed, using default: {exc}")
+        self._connection_signature = signature
 
     async def insert_missing_graph_records(
         self,
@@ -55,6 +68,7 @@ class MilvusGraphVectorStore:
         entities: list[dict[str, Any]],
         triples: list[dict[str, Any]],
     ) -> None:
+        self._init_connection()
         if not entities and not triples:
             return
 
@@ -89,6 +103,7 @@ class MilvusGraphVectorStore:
             await asyncio.to_thread(self._insert_triples, triple_collection, missing_triples, triple_embeddings)
 
     async def delete_graph_records(self, kb_id: str, *, entity_ids: list[str], triple_ids: list[str]) -> None:
+        self._init_connection()
         tasks = []
         if entity_ids:
             tasks.append(asyncio.to_thread(self._delete_ids, graph_entity_collection_name(kb_id), entity_ids))
@@ -105,6 +120,7 @@ class MilvusGraphVectorStore:
         embedding_model_spec: str,
         top_k: int,
     ) -> list[dict[str, Any]]:
+        self._init_connection()
         collection_name = graph_entity_collection_name(kb_id)
         has_collection = await _run_milvus_query_io(
             utility.has_collection, collection_name, using=self.connection_alias
@@ -127,6 +143,7 @@ class MilvusGraphVectorStore:
         embedding_model_spec: str,
         top_k: int,
     ) -> list[dict[str, Any]]:
+        self._init_connection()
         collection_name = graph_triple_collection_name(kb_id)
         has_collection = await _run_milvus_query_io(
             utility.has_collection, collection_name, using=self.connection_alias
@@ -142,6 +159,7 @@ class MilvusGraphVectorStore:
         )
 
     def drop_graph_collections(self, kb_id: str) -> None:
+        self._init_connection()
         for collection_name in [graph_entity_collection_name(kb_id), graph_triple_collection_name(kb_id)]:
             try:
                 if utility.has_collection(collection_name, using=self.connection_alias):

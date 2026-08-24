@@ -30,6 +30,10 @@ async def lifespan(app: FastAPI):
 
         async with pg_manager.get_async_session_context() as session:
             await ensure_rbac_seeded(session)
+
+        from yuxi.services.infrastructure_config_service import initialize_infrastructure_config
+
+        await initialize_infrastructure_config()
     except Exception as e:
         logger.error(f"Failed to initialize database during startup: {e}")
 

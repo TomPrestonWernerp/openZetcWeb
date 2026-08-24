@@ -4,6 +4,16 @@
 
 同一版本的多次功能更新时，应以功能为单位进行更新，比如之前添加了 A 功能的更新，在后续的更新中修复了因 A 功能引入的 bug，那么这个修复说明应该和 A 功能描述放在一起，而不是新增一条修复记录，功能更新同理。
 
+## v0.6.5 (2026-08-24)
+
+### 存储与数据库连接配置
+
+- 基础设置新增对象存储、向量数据库和图数据库配置，默认保持 Docker Compose 的 MinIO、Milvus、Neo4j 本机服务；支持通过 S3、Milvus、Neo4j 兼容协议连接 Amazon S3、阿里云 OSS、腾讯云 COS、七牛云 Kodo、Zilliz Cloud、Neo4j Aura 等托管服务。
+- 新增超级管理员专用配置、密钥按需查看与真实连接测试接口；Secret Key、Token 和密码默认脱敏，仅超级管理员主动点击查看时才从数据库解密返回。
+- 对象存储、向量数据库、图数据库分别以 PostgreSQL `object_storage_configs`、`vector_database_configs`、`graph_database_configs` 表为权威存储；每类可保存多个命名来源并单独设置唯一激活来源。旧 `infrastructure_configs` 单表会在启动时自动迁移并退役。
+- Secret Key、Token 和密码使用部署密钥加密后入库；环境变量和原有 TOML 仅用于首次初始化，Redis 继续承担 API 与 Worker 的激活配置同步。激活来源或修改激活配置后，按配置签名重建对象存储、Milvus 和 Neo4j 客户端。
+- 切换基础设施连接不会自动迁移已有对象、向量或图谱数据；管理界面明确提示需先迁移数据或重建索引。
+
 ## v0.6.3 (2026-08-12)
 
 ### 用户、部门与角色批量管理

@@ -1,5 +1,4 @@
 import asyncio
-import os
 import time
 import traceback
 import weakref
@@ -300,15 +299,20 @@ class MilvusKB(KnowledgeBase):
         if not MILVUS_AVAILABLE:
             raise ImportError("pymilvus is not installed. Please install it with: pip install pymilvus")
 
-        # Milvus 配置
-        # self.milvus_host = kwargs.get('milvus_host', os.getenv('MILVUS_HOST', 'localhost'))
-        # self.milvus_port = kwargs.get('milvus_port', int(os.getenv('MILVUS_PORT', '19530')))
-        self.milvus_token = kwargs.get("milvus_token", os.getenv("MILVUS_TOKEN") or "")
-        self.milvus_uri = kwargs.get("milvus_uri", os.getenv("MILVUS_URI") or "http://localhost:19530")
-        self.milvus_db = kwargs.get("milvus_db") or "yuxi"
-
-        # 连接名称
-        self.connection_alias = f"milvus_{hashstr(work_dir, 6)}"
+        self._settings_overrides = {
+            key: value
+            for key, value in {
+                "uri": kwargs.get("milvus_uri"),
+                "token": kwargs.get("milvus_token"),
+                "name": kwargs.get("milvus_db"),
+            }.items()
+            if value is not None
+        }
+        self.milvus_token = ""
+        self.milvus_uri = ""
+        self.milvus_db = ""
+        self.connection_alias = ""
+        self._connection_signature = None
 
         # 存储集合映射 {kb_id: Collection}
         self.collections: dict[str, Any] = {}
@@ -318,20 +322,44 @@ class MilvusKB(KnowledgeBase):
 
         logger.info("MilvusKB initialized")
 
+    def _current_connection_settings(self) -> dict[str, str]:
+        from yuxi.config import config
+
+        settings = config.resolve_infrastructure_config("vector_database")
+        settings.update(self._settings_overrides)
+        return {
+            "uri": str(settings.get("uri") or "http://milvus:19530"),
+            "token": str(settings.get("token") or ""),
+            "name": str(settings.get("name") or "yuxi"),
+        }
+
     def _init_connection(self):
         """初始化 Milvus 连接"""
+        if not hasattr(self, "_settings_overrides"):
+            return
+        settings = self._current_connection_settings()
+        signature = tuple(settings.values())
+        if signature == self._connection_signature and connections.has_connection(self.connection_alias):
+            return
+
         try:
-            # 连接到 Milvus
+            if self.connection_alias and connections.has_connection(self.connection_alias):
+                connections.disconnect(self.connection_alias)
+            self.milvus_uri = settings["uri"]
+            self.milvus_token = settings["token"]
+            self.milvus_db = settings["name"]
+            self.connection_alias = f"milvus_{hashstr(f'{self.work_dir}:{self.milvus_uri}:{self.milvus_db}', 10)}"
             connections.connect(alias=self.connection_alias, uri=self.milvus_uri, token=self.milvus_token)
 
-            # 创建数据库（如果不存在）
             try:
-                if self.milvus_db not in db.list_database():
-                    db.create_database(self.milvus_db)
-                db.using_database(self.milvus_db)
+                if self.milvus_db not in db.list_database(using=self.connection_alias):
+                    db.create_database(self.milvus_db, using=self.connection_alias)
+                db.using_database(self.milvus_db, using=self.connection_alias)
             except Exception as e:
                 logger.warning(f"Database operation failed, using default: {e}")
 
+            self.collections.clear()
+            self._connection_signature = signature
             logger.info(f"Connected to Milvus at {self.milvus_uri}")
 
         except Exception as e:
@@ -340,6 +368,7 @@ class MilvusKB(KnowledgeBase):
 
     async def _create_kb_instance(self, kb_id: str, kb_config: dict) -> Any:
         """创建 Milvus 集合"""
+        self._init_connection()
         logger.info(f"Creating Milvus collection for {kb_id}")
 
         if not (metadata := self.databases_meta.get(kb_id)):
@@ -482,6 +511,7 @@ class MilvusKB(KnowledgeBase):
 
     async def _get_milvus_collection(self, kb_id: str):
         """获取或创建 Milvus 集合"""
+        self._init_connection()
         if kb_id in self.collections:
             return self.collections[kb_id]
 
@@ -1308,6 +1338,7 @@ class MilvusKB(KnowledgeBase):
 
     async def delete_database(self, kb_id: str) -> dict:
         """删除数据库，同时清除Milvus中的集合"""
+        self._init_connection()
 
         def delete_milvus_collections() -> None:
             try:

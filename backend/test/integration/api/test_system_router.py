@@ -72,6 +72,40 @@ async def test_sandbox_config_is_environment_only(test_client, admin_headers):
     assert update_response.json()["detail"] == "未知配置项: sandbox_provisioner_url"
 
 
+async def test_infrastructure_config_requires_superadmin_and_tests_local_services(
+    test_client, admin_headers, standard_user
+):
+    denied_response = await test_client.get(
+        "/api/system/infrastructure-config",
+        headers=standard_user["headers"],
+    )
+    assert denied_response.status_code == 403
+
+    config_response = await test_client.get("/api/system/infrastructure-config", headers=admin_headers)
+    assert config_response.status_code == 200, config_response.text
+    infrastructure = config_response.json()
+    assert infrastructure["object_storage"]["secret_key"] == "********"
+    assert infrastructure["graph_database"]["password"] == "********"
+
+    reveal_response = await test_client.post(
+        "/api/system/infrastructure-config/reveal",
+        json={"section": "object_storage", "field": "secret_key"},
+        headers=admin_headers,
+    )
+    assert reveal_response.status_code == 200, reveal_response.text
+    assert reveal_response.json()["value"]
+    assert reveal_response.json()["value"] != "********"
+
+    for section in ("object_storage", "vector_database", "graph_database"):
+        test_response = await test_client.post(
+            "/api/system/infrastructure-config/test",
+            json={"section": section, "values": infrastructure[section]},
+            headers=admin_headers,
+        )
+        assert test_response.status_code == 200, test_response.text
+        assert test_response.json()["status"] == "ok"
+
+
 async def test_admin_can_fetch_tools_with_config_guide_field(test_client, admin_headers):
     response = await test_client.get("/api/system/tools", headers=admin_headers)
     assert response.status_code == 200, response.text

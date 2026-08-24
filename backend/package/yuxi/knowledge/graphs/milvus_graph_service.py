@@ -91,11 +91,14 @@ class MilvusGraphService:
         self.graph_repo = graph_repo or KnowledgeGraphRepository()
         self._graph_vector_store = graph_vector_store
         self._connection = neo4j_connection
+        self._uses_shared_connection = neo4j_connection is None
 
     @property
     def connection(self) -> Neo4jConnectionManager:
-        if self._connection is None:
+        if self._uses_shared_connection:
             self._connection = get_shared_neo4j_connection()
+        elif self._connection is None:
+            raise RuntimeError("Neo4j connection is not available")
         return self._connection
 
     @property
@@ -107,6 +110,11 @@ class MilvusGraphService:
     @property
     def driver(self):
         return self.connection.driver
+
+    def session(self):
+        if hasattr(self.connection, "session"):
+            return self.connection.session()
+        return self.driver.session()
 
     async def get_status(self, kb_id: str, *, tasker: Any = None) -> dict[str, Any]:
         kb = await self._get_milvus_kb(kb_id)
@@ -391,7 +399,7 @@ class MilvusGraphService:
                     extractor_type=relation_extractor_type,
                 )
 
-        neo4j_write(self.driver, query)
+        neo4j_write(self.connection, query)
         return entity_records, triple_records
 
     def _build_entity_records(self, kb_id: str, entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -476,7 +484,7 @@ class MilvusGraphService:
         def query(tx):
             tx.run(f"MATCH (n:MilvusKB:`{label}`) DETACH DELETE n")
 
-        neo4j_write(self.driver, query)
+        neo4j_write(self.connection, query)
         self.graph_vector_store.drop_graph_collections(kb_id)
 
     async def delete_file_graph(self, kb_id: str, file_id: str) -> None:
@@ -522,7 +530,7 @@ class MilvusGraphService:
                 file_id=file_id,
             )
 
-        neo4j_write(self.driver, query)
+        neo4j_write(self.connection, query)
 
     async def query_nodes(
         self,
@@ -562,7 +570,7 @@ class MilvusGraphService:
         max_depth: int,
         exclude_chunk: bool,
     ) -> dict[str, Any]:
-        with self.driver.session() as session:
+        with self.session() as session:
             query_params: dict[str, Any] = {
                 "keyword": keyword,
                 "limit": limit,
@@ -624,7 +632,7 @@ class MilvusGraphService:
         entity_ids: list[str],
         max_nodes: int,
     ) -> dict[str, Any]:
-        with self.driver.session() as session:
+        with self.session() as session:
             record = session.run(
                 cypher,
                 entity_ids=entity_ids,
@@ -727,7 +735,7 @@ class MilvusGraphService:
             return []
 
     def _get_labels_sync(self, cypher: str, kb_id: str) -> list[Any]:
-        return neo4j_read(self.driver, cypher, kb_id=kb_id)
+        return neo4j_read(self.connection, cypher, kb_id=kb_id)
 
     async def get_stats(self, kb_id: str | None = None) -> dict[str, Any]:
         effective_kb_id = kb_id or self.kb_id
@@ -754,7 +762,7 @@ class MilvusGraphService:
             return {"total_nodes": 0, "total_edges": 0, "entity_types": []}
 
     def _get_stats_sync(self, stats_cypher: str, label_cypher: str) -> dict[str, Any]:
-        with self.driver.session() as session:
+        with self.session() as session:
             stats = session.run(stats_cypher).single()
             label_stats = session.run(label_cypher)
             return {

@@ -764,6 +764,77 @@ class ResourceSubmission(Base):
         }
 
 
+class InfrastructureSourceMixin:
+    """基础设施来源表的公共字段。敏感字段由服务层加密后写入 config_json。"""
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    config_name = Column(String(100), nullable=False, unique=True, index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    config_json = Column(JSON, nullable=False, default=dict)
+    created_by_uid = Column(String(64), nullable=True)
+    updated_by_uid = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "config_name": self.config_name,
+            "provider": self.provider,
+            "config_json": self.config_json or {},
+            "is_active": self.is_active,
+            "created_by_uid": self.created_by_uid,
+            "updated_by_uid": self.updated_by_uid,
+            "created_at": format_utc_datetime(self.created_at),
+            "updated_at": format_utc_datetime(self.updated_at),
+        }
+
+
+class ObjectStorageConfig(InfrastructureSourceMixin, Base):
+    """对象存储来源；同一时间只能激活一条配置。"""
+
+    __tablename__ = "object_storage_configs"
+    is_active = Column(Boolean, nullable=False, default=False, index=True)
+    __table_args__ = (
+        Index(
+            "uq_object_storage_configs_one_active",
+            "is_active",
+            unique=True,
+            postgresql_where=is_active.is_(True),
+        ),
+    )
+
+
+class VectorDatabaseConfig(InfrastructureSourceMixin, Base):
+    """向量数据库来源；同一时间只能激活一条配置。"""
+
+    __tablename__ = "vector_database_configs"
+    is_active = Column(Boolean, nullable=False, default=False, index=True)
+    __table_args__ = (
+        Index(
+            "uq_vector_database_configs_one_active",
+            "is_active",
+            unique=True,
+            postgresql_where=is_active.is_(True),
+        ),
+    )
+
+
+class GraphDatabaseConfig(InfrastructureSourceMixin, Base):
+    """图数据库来源；同一时间只能激活一条配置。"""
+
+    __tablename__ = "graph_database_configs"
+    is_active = Column(Boolean, nullable=False, default=False, index=True)
+    __table_args__ = (
+        Index(
+            "uq_graph_database_configs_one_active",
+            "is_active",
+            unique=True,
+            postgresql_where=is_active.is_(True),
+        ),
+    )
+
+
 class ModelProvider(Base):
     """模型供应商配置，存储 provider 基础信息、模型端点和可用模型。"""
 

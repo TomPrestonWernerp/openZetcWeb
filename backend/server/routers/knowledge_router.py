@@ -33,7 +33,7 @@ from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
-from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
+from yuxi.storage.minio.client import StorageError, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
@@ -1863,7 +1863,7 @@ async def fetch_url(
 
         # 3. 上传到 MinIO
         minio_client = get_minio_client()
-        bucket_name = MinIOClient.KB_BUCKETS["documents"]
+        bucket_name = minio_client.KB_BUCKETS["documents"]
         await asyncio.to_thread(minio_client.ensure_bucket_exists, bucket_name)
 
         folder = kb_id if kb_id else "unknown"
@@ -1922,7 +1922,7 @@ async def import_workspace_files(
     await ensure_knowledge_manage(current_user, kb_id, db, "knowledge.upload")
     await _ensure_database_supports_documents(kb_id, "文档添加/解析/入库")
 
-    bucket_name = MinIOClient.KB_BUCKETS["documents"]
+    bucket_name = get_minio_client().KB_BUCKETS["documents"]
     results = []
     for workspace_path in paths:
         target = resolve_workspace_file_path(path=workspace_path, current_user=current_user)
@@ -2021,7 +2021,7 @@ async def upload_file(
     timestamp = int(time.time() * 1000)
     minio_filename = f"{basename}_{timestamp}{ext}"
 
-    bucket_name = MinIOClient.KB_BUCKETS["documents"]
+    bucket_name = get_minio_client().KB_BUCKETS["documents"]
     folder = kb_id if kb_id else "unknown"
     object_name = f"{folder}/upload/{minio_filename}"
 

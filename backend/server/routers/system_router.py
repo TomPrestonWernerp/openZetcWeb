@@ -11,7 +11,7 @@ from yuxi import config, get_version
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
 
-from server.utils.auth_middleware import get_admin_user, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
 
 system = APIRouter(prefix="/system", tags=["system"])
 
@@ -97,6 +97,117 @@ async def update_config_batch(items: dict = Body(...), current_user: User = Depe
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config.save()
     return config.dump_config()
+
+
+@system.get("/infrastructure-config")
+async def get_infrastructure_settings(current_user: User = Depends(get_superadmin_user)) -> dict:
+    """获取已脱敏的对象存储、向量数据库和图数据库配置。"""
+    from yuxi.services.infrastructure_config_service import get_infrastructure_config
+
+    return await get_infrastructure_config()
+
+
+@system.post("/infrastructure-config")
+async def update_infrastructure_settings(
+    section: str = Body(...),
+    values: dict = Body(...),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """保存单类基础设施配置，密钥掩码表示保留原值。"""
+    from yuxi.services.infrastructure_config_service import save_infrastructure_config
+
+    try:
+        return await save_infrastructure_config(section, values, updated_by_uid=current_user.uid)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@system.post("/infrastructure-config/sources")
+async def save_infrastructure_source_settings(
+    section: str = Body(...),
+    config_name: str = Body(...),
+    values: dict = Body(...),
+    source_id: int | None = Body(default=None),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """新增或修改一个对象存储、向量数据库或图数据库来源。"""
+    from yuxi.services.infrastructure_config_service import save_infrastructure_source
+
+    try:
+        return await save_infrastructure_source(
+            section,
+            config_name,
+            values,
+            source_id=source_id,
+            updated_by_uid=current_user.uid,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@system.post("/infrastructure-config/activate")
+async def activate_infrastructure_source_settings(
+    section: str = Body(...),
+    source_id: int = Body(...),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """将指定来源设为该类型当前唯一的激活配置。"""
+    from yuxi.services.infrastructure_config_service import activate_infrastructure_source
+
+    try:
+        return await activate_infrastructure_source(section, source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@system.post("/infrastructure-config/delete")
+async def delete_infrastructure_source_settings(
+    section: str = Body(...),
+    source_id: int = Body(...),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """删除一个未激活的基础设施来源。"""
+    from yuxi.services.infrastructure_config_service import delete_infrastructure_source
+
+    try:
+        return await delete_infrastructure_source(section, source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@system.post("/infrastructure-config/test")
+async def test_infrastructure_settings(
+    section: str = Body(...),
+    values: dict = Body(...),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """使用当前表单值测试基础设施连接，不保存配置。"""
+    from yuxi.services.infrastructure_config_service import test_infrastructure_connection
+
+    try:
+        return await test_infrastructure_connection(section, values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning(f"Infrastructure connection test failed for {section}: {exc}")
+        raise HTTPException(status_code=400, detail=f"连接失败: {exc}") from exc
+
+
+@system.post("/infrastructure-config/reveal")
+async def reveal_infrastructure_setting(
+    section: str = Body(...),
+    field: str = Body(...),
+    source: str | None = Body(default=None),
+    source_id: int | None = Body(default=None),
+    current_user: User = Depends(get_superadmin_user),
+) -> dict:
+    """仅供超级管理员按需读取单个基础设施密钥。"""
+    from yuxi.services.infrastructure_config_service import reveal_infrastructure_secret
+
+    try:
+        return await reveal_infrastructure_secret(section, field, source=source, source_id=source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @system.get("/logs")

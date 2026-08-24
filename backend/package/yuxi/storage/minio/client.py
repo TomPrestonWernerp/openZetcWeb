@@ -47,7 +47,12 @@ def normalize_public_minio_url(value: str | None) -> str | None:
             return value
     except ValueError:
         return value
-    public_base_url = (os.getenv("MINIO_PUBLIC_URL") or "/minio").rstrip("/")
+    try:
+        from yuxi.config import config
+
+        public_base_url = config.object_storage_public_url.rstrip("/")
+    except Exception:
+        public_base_url = (os.getenv("MINIO_PUBLIC_URL") or "/minio").rstrip("/")
     normalized = f"{public_base_url}{parsed.path}"
     if parsed.query:
         normalized = f"{normalized}?{parsed.query}"
@@ -70,27 +75,29 @@ class MinIOClient:
         "images": "public",
     }
 
-    def __init__(self):
-        """初始化 MinIO 客户端"""
-        self.endpoint = os.getenv("MINIO_URI") or "http://minio:9000"
-        self.access_key = os.getenv("MINIO_ACCESS_KEY") or "minioadmin"
-        self.secret_key = os.getenv("MINIO_SECRET_KEY") or "minioadmin"
-        self.public_base_url = (os.getenv("MINIO_PUBLIC_URL") or "/minio").rstrip("/")
-        self._client = None
+    def __init__(self, settings: dict | None = None):
+        """初始化 S3 兼容对象存储客户端，保留类名以兼容既有调用。"""
+        if settings is None:
+            from yuxi.config import config
 
-        # 设置公开访问端点
-        if os.getenv("RUNNING_IN_DOCKER"):
-            host_ip = (os.getenv("HOST_IP") or "").strip()
-            if not host_ip:
-                host_ip = "localhost"
-            if "://" in host_ip:
-                host_ip = host_ip.split("://")[-1]
-            host_ip = host_ip.rstrip("/")
-            self.public_endpoint = f"{host_ip}:9000"
-            logger.debug(f"Docker MinIOClient public_endpoint: {self.public_endpoint}")
-        else:
-            self.public_endpoint = "localhost:9000"
-            logger.debug(f"Default_client: {self.public_endpoint}")
+            settings = config.resolve_infrastructure_config("object_storage")
+
+        self.provider = str(settings.get("provider") or "minio")
+        self.endpoint = str(settings.get("endpoint") or "http://minio:9000").rstrip("/")
+        self.access_key = str(settings.get("access_key") or "")
+        self.secret_key = str(settings.get("secret_key") or "")
+        self.region = str(settings.get("region") or "") or None
+        self.secure = bool(settings.get("secure")) or self.endpoint.startswith("https://")
+        self.public_base_url = str(settings.get("public_url") or "").rstrip("/")
+        documents_bucket = str(settings.get("documents_bucket") or "knowledgebases")
+        public_bucket = str(settings.get("public_bucket") or "public")
+        self.KB_BUCKETS = {
+            "documents": documents_bucket,
+            "parsed": documents_bucket,
+            "images": public_bucket,
+        }
+        self.PUBLIC_READ_BUCKETS = {public_bucket}
+        self._client = None
 
     @property
     def client(self) -> Minio:
@@ -101,7 +108,11 @@ class MinIOClient:
                 endpoint = endpoint.split("://")[-1]
 
             self._client = Minio(
-                endpoint=endpoint, access_key=self.access_key, secret_key=self.secret_key, secure=False
+                endpoint=endpoint,
+                access_key=self.access_key,
+                secret_key=self.secret_key,
+                secure=self.secure,
+                region=self.region,
             )
         return self._client
 
@@ -145,9 +156,10 @@ class MinIOClient:
 
             assert result is not None
             if bucket_name in self.PUBLIC_READ_BUCKETS:
-                url = f"{self.public_base_url}/{bucket_name}/{quote(object_name, safe='/')}"
+                public_base_url = self.public_base_url or self.endpoint
+                url = f"{public_base_url}/{bucket_name}/{quote(object_name, safe='/')}"
             else:
-                url = f"http://{self.public_endpoint}/{bucket_name}/{object_name}"
+                url = f"{self.endpoint}/{bucket_name}/{quote(object_name, safe='/')}"
 
             return UploadResult(url, bucket_name, object_name)
 
@@ -352,7 +364,7 @@ class MinIOClient:
 
     def _ensure_public_read_access(self, bucket_name: str) -> None:
         """设置存储桶策略，允许公开读取对象"""
-        if bucket_name not in self.PUBLIC_READ_BUCKETS:
+        if self.provider != "minio" or bucket_name not in self.PUBLIC_READ_BUCKETS:
             return
 
         policy = {
@@ -458,13 +470,18 @@ class MinIOClient:
 
 # 全局客户端实例
 _default_client = None
+_default_client_signature = None
 
 
 def get_minio_client() -> MinIOClient:
-    """获取 MinIO 客户端实例"""
-    global _default_client
-    if _default_client is None:
+    """获取对象存储客户端；基础设置变化后自动创建新连接。"""
+    from yuxi.config import config
+
+    global _default_client, _default_client_signature
+    signature = config.infrastructure_signature("object_storage")
+    if _default_client is None or signature != _default_client_signature:
         _default_client = MinIOClient()
+        _default_client_signature = signature
     return _default_client
 
 
