@@ -216,9 +216,14 @@
 
       <footer class="footer">
         <div class="footer-content">
-          <p class="copyright">
+          <a
+            class="copyright"
+            href="https://www.zjshjkj.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {{ infoStore.footer?.copyright || '浙江省环境科技股份有限公司' }}
-          </p>
+          </a>
         </div>
       </footer>
     </template>
@@ -230,7 +235,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
-import { healthApi } from '@/apis/system_api'
+import { desktopReleaseApi, healthApi } from '@/apis/system_api'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import {
   ArrowRight,
@@ -243,7 +248,6 @@ import {
   Workflow
 } from 'lucide-vue-next'
 import {
-  DESKTOP_RELEASE_API_URL,
   DESKTOP_RELEASE_PAGE_URL,
   detectDesktopTarget,
   findRecommendedPackage,
@@ -258,7 +262,6 @@ const infoStore = useInfoStore()
 const isLoading = ref(true)
 const error = ref(null)
 let subtitleTimer = null
-let releaseRequestController = null
 
 const subtitleIndex = ref(0)
 const downloadMenuRef = ref(null)
@@ -365,27 +368,15 @@ const goToChat = async () => {
 }
 
 const loadDesktopRelease = async () => {
-  releaseRequestController = new AbortController()
   downloadLoading.value = true
 
   try {
-    const [target, response] = await Promise.all([
-      detectDesktopTarget(),
-      fetch(DESKTOP_RELEASE_API_URL, {
-        headers: { Accept: 'application/vnd.github+json' },
-        signal: releaseRequestController.signal
-      })
-    ])
-    desktopTarget.value = target
-    if (!response.ok) throw new Error(`GitHub Releases 请求失败：${response.status}`)
-
-    const release = await response.json()
+    desktopTarget.value = await detectDesktopTarget()
+    const release = await desktopReleaseApi.getLatest()
     releaseVersion.value = release.tag_name || ''
     desktopPackages.value = toDesktopPackages(release.assets)
   } catch (releaseError) {
-    if (releaseError.name !== 'AbortError') {
-      console.warn('桌面端安装包信息获取失败:', releaseError)
-    }
+    console.warn('桌面端安装包信息获取失败:', releaseError)
   } finally {
     downloadLoading.value = false
   }
@@ -411,7 +402,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopSubtitleCarousel()
-  releaseRequestController?.abort()
   document.removeEventListener('click', closeDownloadMenuOnOutsideClick)
   document.removeEventListener('keydown', closeDownloadMenuOnEscape)
 })
@@ -1046,11 +1036,19 @@ onUnmounted(() => {
 }
 
 .copyright {
+  display: inline-block;
   color: var(--main-700);
   font-size: 0.9rem;
   font-weight: 500;
   margin: 0;
   opacity: 0.75;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
 }
 
 @keyframes revealUp {
@@ -1159,6 +1157,13 @@ onUnmounted(() => {
   .visual-card {
     max-width: 520px;
     margin: 0 auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  .download-menu {
+    top: -12px;
+    left: calc(100% + 36px);
   }
 }
 

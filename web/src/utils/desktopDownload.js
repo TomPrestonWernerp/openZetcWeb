@@ -1,5 +1,3 @@
-export const DESKTOP_RELEASE_API_URL =
-  'https://api.github.com/repos/TomPrestonWernerp/openZetcX/releases/latest'
 export const DESKTOP_RELEASE_PAGE_URL =
   'https://github.com/TomPrestonWernerp/openZetcX/releases/latest'
 

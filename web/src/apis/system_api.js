@@ -68,6 +68,14 @@ export const brandApi = {
   getInfoConfig: () => apiGet('/api/system/info', {}, false)
 }
 
+export const desktopReleaseApi = {
+  /**
+   * 获取最新桌面端版本和安装包（公开接口）
+   * @returns {Promise} - 桌面端发布信息
+   */
+  getLatest: () => apiGet('/api/system/desktop-release', {}, false)
+}
+
 // =============================================================================
 // === OCR服务分组 ===
 // =============================================================================
