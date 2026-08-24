@@ -1,9 +1,12 @@
+import asyncio
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import aiofiles
+import httpx
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from yuxi import config, get_version
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
@@ -11,6 +14,17 @@ from yuxi.utils.logging_config import logger
 from server.utils.auth_middleware import get_admin_user, get_required_user
 
 system = APIRouter(prefix="/system", tags=["system"])
+
+DESKTOP_RELEASE_DOWNLOAD_URL = "https://github.com/TomPrestonWernerp/openZetcX/releases/latest/download"
+DESKTOP_RELEASE_MANIFEST_URLS = (
+    f"{DESKTOP_RELEASE_DOWNLOAD_URL}/latest.yml",
+    f"{DESKTOP_RELEASE_DOWNLOAD_URL}/latest-mac.yml",
+)
+DESKTOP_RELEASE_ASSET_SUFFIXES = (
+    "Windows-x64.exe",
+    "macOS-arm64.dmg",
+    "macOS-x64.dmg",
+)
 
 # =============================================================================
 # === 健康检查分组 ===
@@ -170,6 +184,52 @@ async def get_info_config():
     except Exception as e:
         logger.error(f"获取信息配置失败: {e}")
         raise HTTPException(status_code=500, detail="获取信息配置失败")
+
+
+def _build_desktop_release(manifests: list[dict]) -> dict:
+    versions = {str(manifest.get("version", "")).strip() for manifest in manifests}
+    versions.discard("")
+    if len(versions) != 1:
+        raise ValueError("桌面端更新清单版本不一致")
+
+    assets = []
+    for manifest in manifests:
+        for item in manifest.get("files", []):
+            name = str(item.get("url", "")).strip()
+            if name.endswith(DESKTOP_RELEASE_ASSET_SUFFIXES):
+                assets.append(
+                    {
+                        "name": name,
+                        "browser_download_url": f"{DESKTOP_RELEASE_DOWNLOAD_URL}/{quote(name)}",
+                    }
+                )
+
+    if len(assets) != len(DESKTOP_RELEASE_ASSET_SUFFIXES):
+        raise ValueError("桌面端更新清单缺少安装包")
+
+    version = versions.pop()
+    return {"tag_name": version if version.startswith("v") else f"v{version}", "assets": assets}
+
+
+@system.get("/desktop-release")
+async def get_desktop_release(response: Response):
+    """获取最新桌面端版本及安装包（公开接口）"""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            manifest_responses = await asyncio.gather(
+                *(client.get(url, headers={"Cache-Control": "no-cache"}) for url in DESKTOP_RELEASE_MANIFEST_URLS)
+            )
+
+        manifests = []
+        for manifest_response in manifest_responses:
+            manifest_response.raise_for_status()
+            manifests.append(yaml.safe_load(manifest_response.content.decode("utf-8")))
+
+        response.headers["Cache-Control"] = "no-store"
+        return _build_desktop_release(manifests)
+    except (httpx.HTTPError, UnicodeDecodeError, yaml.YAMLError, ValueError) as exc:
+        logger.warning(f"获取最新桌面端发布信息失败: {exc}")
+        raise HTTPException(status_code=502, detail="暂时无法获取最新桌面端版本") from exc
 
 
 @system.post("/info/reload")
