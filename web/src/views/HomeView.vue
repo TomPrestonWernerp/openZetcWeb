@@ -413,9 +413,32 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   color: var(--main-900);
-  background: var(--main-5);
+  background-color: var(--main-5);
+  background-image: url('/hjkj-back.jpg');
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: fixed;
   position: relative;
   overflow-x: hidden;
+  isolation: isolate;
+
+  &::before {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(247, 252, 253, 0.92) 0%,
+        rgba(247, 252, 253, 0.8) 38%,
+        rgba(247, 252, 253, 0.34) 70%,
+        rgba(247, 252, 253, 0.12) 100%
+      ),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06));
+    pointer-events: none;
+    content: '';
+  }
 }
 
 // 加载中状态
@@ -449,6 +472,7 @@ onUnmounted(() => {
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
+  opacity: 0.18;
 }
 
 .orb {
@@ -1117,7 +1141,17 @@ onUnmounted(() => {
 // 暗色模式
 :global(:root.dark) {
   .home-container {
-    background: var(--main-5);
+    background-color: var(--main-5);
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        rgba(4, 35, 44, 0.9) 0%,
+        rgba(4, 35, 44, 0.76) 42%,
+        rgba(4, 35, 44, 0.38) 74%,
+        rgba(4, 35, 44, 0.2) 100%
+      );
+    }
   }
 }
 
@@ -1168,6 +1202,15 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .home-container {
+    background-position: 58% bottom;
+    background-attachment: scroll;
+
+    &::before {
+      background: rgba(247, 252, 253, 0.8);
+    }
+  }
+
   .glass-header {
     padding: 0.75rem 1.25rem;
   }

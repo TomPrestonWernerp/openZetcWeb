@@ -33,7 +33,7 @@
       <div class="login-card">
         <!-- 左侧图片 -->
         <div class="card-side is-image">
-          <img :src="loginBgImage" alt="登录背景" class="login-bg-image" />
+          <img :src="loginBgImage" alt="浙江省环境科技企业大楼" class="login-bg-image" />
         </div>
 
         <!-- 右侧表单 -->
@@ -785,7 +785,7 @@ onUnmounted(() => {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center;
+    object-position: 60% center;
   }
 }
 
