@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from server.utils.auth_middleware import get_admin_user
-from yuxi.knowledge.eval.benchmark_generation import (
+from openzetc.knowledge.eval.benchmark_generation import (
     DEFAULT_BENCHMARK_GENERATION_CONCURRENCY,
     MAX_BENCHMARK_GENERATION_CONCURRENCY,
 )
-from yuxi.knowledge.eval.service import EvaluationService
-from yuxi.storage.postgres.models_business import User
-from yuxi.utils import logger
+from openzetc.knowledge.eval.service import EvaluationService
+from openzetc.storage.postgres.models_business import User
+from openzetc.utils import logger
 
 
 evaluation = APIRouter(prefix="/evaluation", tags=["evaluation"])

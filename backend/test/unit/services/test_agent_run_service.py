@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import yuxi.services.agent_run_service as agent_run_service
-from yuxi.services.input_message_service import (
+import openzetc.services.agent_run_service as agent_run_service
+from openzetc.services.input_message_service import (
     build_chat_input_message,
     build_chat_input_message_from_openai_content,
     restore_chat_input_message,
@@ -488,7 +488,7 @@ async def test_stream_agent_run_events_compacts_verbose_false(monkeypatch: pytes
                     "thread_id": "thread-1",
                     "event": "custom",
                     "payload": {
-                        "name": "yuxi.init",
+                        "name": "openzetc.init",
                         "chunk": {
                             "request_id": "req-1",
                             "response": None,
@@ -521,7 +521,7 @@ async def test_stream_agent_run_events_compacts_verbose_false(monkeypatch: pytes
                     "thread_id": "thread-1",
                     "event": "custom",
                     "payload": {
-                        "name": "yuxi.agent_state",
+                        "name": "openzetc.agent_state",
                         "chunk": {
                             "request_id": "req-1",
                             "response": None,
@@ -617,7 +617,7 @@ async def test_stream_agent_run_events_compacts_verbose_false(monkeypatch: pytes
     init_data = _sse_data(chunks[0])
     init_chunk = init_data["payload"]["chunk"]
     assert init_data["request_id"] == "req-1"
-    assert init_data["payload"]["name"] == "yuxi.init"
+    assert init_data["payload"]["name"] == "openzetc.init"
     assert "meta" not in init_chunk
     assert "request_id" not in init_chunk
     assert "response" not in init_chunk
@@ -1474,11 +1474,11 @@ def test_compact_stream_chunk_retains_compression_field():
         "response": None,
         "thread_id": "thread-1",
         "status": "context_compression",
-        "compression": {"type": "yuxi.context_compression", "status": "started"},
+        "compression": {"type": "openzetc.context_compression", "status": "started"},
         "meta": {"uid": "user-1"},
     }
 
     compact = agent_run_service._compact_stream_chunk(chunk)
 
     assert compact["status"] == "context_compression"
-    assert compact["compression"] == {"type": "yuxi.context_compression", "status": "started"}
+    assert compact["compression"] == {"type": "openzetc.context_compression", "status": "started"}

@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.services.rbac_service import get_user_permission_map, require_permission
-from yuxi.services.resource_submission_service import (
+from openzetc.services.rbac_service import get_user_permission_map, require_permission
+from openzetc.services.resource_submission_service import (
     approve_submission,
     get_submission,
     list_my_submissions,
@@ -18,7 +18,7 @@ from yuxi.services.resource_submission_service import (
     reject_submission,
     submit_resource,
 )
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 resource_submissions = APIRouter(prefix="/resource-submissions", tags=["resource-submissions"])
 

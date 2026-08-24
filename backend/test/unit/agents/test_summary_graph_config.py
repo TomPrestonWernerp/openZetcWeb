@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.buildin.chatbot import graph as chatbot_graph
-from yuxi.agents.buildin.subagent import graph as subagent_graph
+from openzetc.agents.buildin.chatbot import graph as chatbot_graph
+from openzetc.agents.buildin.subagent import graph as subagent_graph
 
 
 def _context(summary_threshold: int = 123) -> SimpleNamespace:

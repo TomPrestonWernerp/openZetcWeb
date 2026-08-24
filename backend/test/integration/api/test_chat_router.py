@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 from PIL import Image
-from yuxi.agents.backends.sandbox import ensure_thread_dirs, sandbox_user_data_dir, sandbox_workspace_dir
+from openzetc.agents.backends.sandbox import ensure_thread_dirs, sandbox_user_data_dir, sandbox_workspace_dir
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

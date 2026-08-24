@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Yuxi Initialization Script for Bash/Linux/macOS
-# This script helps set up the environment for the Yuxi project
+# openZetc Initialization Script for Bash/Linux/macOS
+# This script helps set up the environment for the openZetc project
 
 set -e
 
@@ -65,15 +65,15 @@ ensure_jwt_env() {
         set_env_value "JWT_SECRET_KEY" "$JWT_SECRET_KEY"
     fi
 
-    if ! grep -Eq '^YUXI_INSTANCE_ID=.+' .env; then
-        echo "YUXI_INSTANCE_ID is missing in .env."
-        read -p "Please enter your YUXI_INSTANCE_ID (press Enter to auto-generate): " YUXI_INSTANCE_ID
-        if [ -z "$YUXI_INSTANCE_ID" ]; then
-            YUXI_INSTANCE_ID="instance-$(generate_hex 8)"
-            echo "Generated YUXI_INSTANCE_ID and saved it to .env."
+    if ! grep -Eq '^OPENZETC_INSTANCE_ID=.+' .env; then
+        echo "OPENZETC_INSTANCE_ID is missing in .env."
+        read -p "Please enter your OPENZETC_INSTANCE_ID (press Enter to auto-generate): " OPENZETC_INSTANCE_ID
+        if [ -z "$OPENZETC_INSTANCE_ID" ]; then
+            OPENZETC_INSTANCE_ID="instance-$(generate_hex 8)"
+            echo "Generated OPENZETC_INSTANCE_ID and saved it to .env."
         fi
 
-        set_env_value "YUXI_INSTANCE_ID" "$YUXI_INSTANCE_ID"
+        set_env_value "OPENZETC_INSTANCE_ID" "$OPENZETC_INSTANCE_ID"
     fi
 }
 
@@ -104,7 +104,7 @@ skip_existing_image() {
     return 0
 }
 
-echo "🚀 Initializing Yuxi project..."
+echo "🚀 Initializing openZetc project..."
 echo "=================================="
 
 # Check if .env file exists
@@ -145,10 +145,10 @@ else
         echo "Generated JWT_SECRET_KEY and saved it to .env."
     fi
 
-    read -p "Please enter your YUXI_INSTANCE_ID (press Enter to auto-generate): " YUXI_INSTANCE_ID
-    if [ -z "$YUXI_INSTANCE_ID" ]; then
-        YUXI_INSTANCE_ID="instance-$(generate_hex 8)"
-        echo "Generated YUXI_INSTANCE_ID and saved it to .env."
+    read -p "Please enter your OPENZETC_INSTANCE_ID (press Enter to auto-generate): " OPENZETC_INSTANCE_ID
+    if [ -z "$OPENZETC_INSTANCE_ID" ]; then
+        OPENZETC_INSTANCE_ID="instance-$(generate_hex 8)"
+        echo "Generated OPENZETC_INSTANCE_ID and saved it to .env."
     fi
 
     read -s -p "Please enter your SANDBOX_PROVISIONER_TOKEN (press Enter to auto-generate): " SANDBOX_PROVISIONER_TOKEN
@@ -174,7 +174,7 @@ EOF
 
 # JWT security settings
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
-YUXI_INSTANCE_ID=${YUXI_INSTANCE_ID}
+OPENZETC_INSTANCE_ID=${OPENZETC_INSTANCE_ID}
 SANDBOX_PROVISIONER_TOKEN=${SANDBOX_PROVISIONER_TOKEN}
 EOF
 

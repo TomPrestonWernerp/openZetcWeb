@@ -6,11 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.skills import service as skill_service
-from yuxi.agents.toolkits.buildin import install_skill as exported_install_skill
+from openzetc.agents.skills import service as skill_service
+from openzetc.agents.toolkits.buildin import install_skill as exported_install_skill
 
-install_skill_module = importlib.import_module("yuxi.agents.toolkits.buildin.install_skill")
-sandbox_backend_module = importlib.import_module("yuxi.agents.backends.sandbox")
+install_skill_module = importlib.import_module("openzetc.agents.toolkits.buildin.install_skill")
+sandbox_backend_module = importlib.import_module("openzetc.agents.backends.sandbox")
 
 
 class _AsyncSessionContext:

@@ -131,7 +131,7 @@ async def _consume_run_stream(
             event_counts[event] = event_counts.get(event, 0) + 1
             if event == "messages":
                 message_chunks.extend(_collect_message_chunks(payload))
-            if event == "custom" and payload.get("name") == "yuxi.agent_state":
+            if event == "custom" and payload.get("name") == "openzetc.agent_state":
                 agent_state = payload.get("agent_state")
                 if isinstance(agent_state, dict):
                     latest_agent_state = agent_state
@@ -192,7 +192,7 @@ async def test_subagent_stream_records_run_and_shares_output_files(
     assert uid, me
 
     suffix = uuid.uuid4().hex[:8]
-    marker = f"YUXI_SUBAGENT_STREAM_E2E_{suffix}"
+    marker = f"OPENZETC_SUBAGENT_STREAM_E2E_{suffix}"
     sub_slug = f"e2e-subagent-{suffix}"
     main_slug = f"e2e-main-{suffix}"
     output_path = "/home/gem/user-data/outputs/subagents.txt"

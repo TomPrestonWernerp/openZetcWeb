@@ -9,7 +9,7 @@ class TestMinIOClientStatFile:
     """Test MinIOClient.stat_file and astat_file methods."""
 
     def test_stat_file_returns_size(self):
-        from yuxi.storage.minio.client import MinIOClient
+        from openzetc.storage.minio.client import MinIOClient
 
         client = MinIOClient()
         mock_stat = MagicMock()
@@ -29,7 +29,7 @@ class TestMinIOClientStatFile:
         from minio.error import S3Error
         from urllib3 import HTTPResponse
 
-        from yuxi.storage.minio.client import MinIOClient
+        from openzetc.storage.minio.client import MinIOClient
 
         client = MinIOClient()
         client._client = MagicMock()
@@ -43,7 +43,7 @@ class TestMinIOClientStatFile:
 
     @pytest.mark.asyncio
     async def test_astat_file_returns_size(self):
-        from yuxi.storage.minio.client import MinIOClient
+        from openzetc.storage.minio.client import MinIOClient
 
         client = MinIOClient()
         mock_stat = MagicMock()
@@ -60,7 +60,7 @@ class TestAddFileRecordSizeFallback:
     """Test that add_file_record fills size from MinIO when not provided."""
 
     def _make_test_kb(self, work_dir="/tmp/test_kb"):
-        from yuxi.knowledge.base import KnowledgeBase
+        from openzetc.knowledge.base import KnowledgeBase
 
         class TestKB(KnowledgeBase):
             @property
@@ -126,7 +126,7 @@ class TestAddFileRecordSizeFallback:
         mock_minio = AsyncMock()
         mock_minio.astat_file.return_value = 9999
 
-        with patch("yuxi.storage.minio.get_minio_client", return_value=mock_minio):
+        with patch("openzetc.storage.minio.get_minio_client", return_value=mock_minio):
             metadata = await kb.add_file_record("db1", item, params=params)
 
             assert metadata["size"] == 9999
@@ -145,7 +145,7 @@ class TestAddFileRecordSizeFallback:
 
         mock_minio = AsyncMock()
 
-        with patch("yuxi.storage.minio.get_minio_client", return_value=mock_minio):
+        with patch("openzetc.storage.minio.get_minio_client", return_value=mock_minio):
             metadata = await kb.add_file_record("db1", item, params=params)
 
             assert metadata["size"] == 5555
@@ -164,7 +164,7 @@ class TestAddFileRecordSizeFallback:
         mock_minio = AsyncMock()
         mock_minio.astat_file.side_effect = Exception("MinIO connection error")
 
-        with patch("yuxi.storage.minio.get_minio_client", return_value=mock_minio):
+        with patch("openzetc.storage.minio.get_minio_client", return_value=mock_minio):
             metadata = await kb.add_file_record("db1", item, params=params)
 
             assert metadata.get("size") is None
@@ -173,7 +173,7 @@ class TestAddFileRecordSizeFallback:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_save_metadata_does_not_overwrite_existing_kb_config():
-    from yuxi.knowledge.base import KnowledgeBase
+    from openzetc.knowledge.base import KnowledgeBase
 
     class TestKB(KnowledgeBase):
         @property
@@ -234,9 +234,9 @@ async def test_save_metadata_does_not_overwrite_existing_kb_config():
     }
 
     with (
-        patch("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository", return_value=kb_repo),
-        patch("yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository", return_value=SimpleNamespace()),
-        patch("yuxi.repositories.evaluation_repository.EvaluationRepository", return_value=SimpleNamespace()),
+        patch("openzetc.repositories.knowledge_base_repository.KnowledgeBaseRepository", return_value=kb_repo),
+        patch("openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository", return_value=SimpleNamespace()),
+        patch("openzetc.repositories.evaluation_repository.EvaluationRepository", return_value=SimpleNamespace()),
     ):
         await kb._save_metadata()
 

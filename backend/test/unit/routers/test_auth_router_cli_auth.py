@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from server.routers.auth_router import auth
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.storage.postgres.models_business import Base, Department, User
+from openzetc.storage.postgres.models_business import Base, Department, User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 

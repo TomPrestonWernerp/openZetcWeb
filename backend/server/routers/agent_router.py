@@ -8,14 +8,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.agents.buildin import agent_manager
-from yuxi.agents.context import filter_config_by_role
-from yuxi.repositories.agent_repository import (
+from openzetc.agents.buildin import agent_manager
+from openzetc.agents.context import filter_config_by_role
+from openzetc.repositories.agent_repository import (
     AgentRepository,
     is_builtin_agent,
     user_can_access_agent,
 )
-from yuxi.services.agent_run_service import (
+from openzetc.services.agent_run_service import (
     cancel_agent_run_view,
     create_agent_run_view,
     get_active_run_by_thread,
@@ -23,9 +23,9 @@ from yuxi.services.agent_run_service import (
     get_agent_run_view,
     stream_agent_run_events,
 )
-from yuxi.services.input_message_service import build_chat_input_message
-from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
-from yuxi.storage.postgres.models_business import User
+from openzetc.services.input_message_service import build_chat_input_message
+from openzetc.services.rbac_service import has_permission, require_permission, validate_share_config
+from openzetc.storage.postgres.models_business import User
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
 

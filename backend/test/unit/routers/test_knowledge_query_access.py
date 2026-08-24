@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from server.routers import knowledge_router
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 
 def _client(monkeypatch, *, accessible: bool) -> tuple[TestClient, list[tuple[str, str]], list[str]]:

@@ -8,11 +8,11 @@ from contextlib import contextmanager
 
 import pytest
 import tomli
-from yuxi.config.app import Config
-from yuxi.config.cache import RUNTIME_CONFIG_REDIS_KEY
+from openzetc.config.app import Config
+from openzetc.config.cache import RUNTIME_CONFIG_REDIS_KEY
 
 pytestmark = pytest.mark.unit
-config_cache = importlib.import_module("yuxi.config.cache")
+config_cache = importlib.import_module("openzetc.config.cache")
 
 
 class _FakeRedis:
@@ -47,7 +47,7 @@ def _patch_runtime_redis(monkeypatch: pytest.MonkeyPatch, redis: _FakeRedis) -> 
     monkeypatch.setattr(config_cache, "sync_redis_client", fake_sync_redis_client)
 
 
-def _import_yuxi_in_fresh_process(tmp_path, config_text: str) -> tuple[dict, subprocess.CompletedProcess[str]]:
+def _import_openzetc_in_fresh_process(tmp_path, config_text: str) -> tuple[dict, subprocess.CompletedProcess[str]]:
     config_dir = tmp_path / "saves" / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "base.toml").write_text(config_text, encoding="utf-8")
@@ -56,13 +56,13 @@ def _import_yuxi_in_fresh_process(tmp_path, config_text: str) -> tuple[dict, sub
             sys.executable,
             "-c",
             (
-                "import json, sys; import yuxi; "
+                "import json, sys; import openzetc; "
                 "print(json.dumps({"
-                "'default_ocr_engine': yuxi.config.default_ocr_engine, "
-                "'default_model': yuxi.config.default_model, "
-                "'factory_loaded': 'yuxi.knowledge.parser.factory' in sys.modules, "
-                "'parser_loaded': 'yuxi.knowledge.parser.unified' in sys.modules, "
-                "'manager_loaded': 'yuxi.knowledge.manager' in sys.modules"
+                "'default_ocr_engine': openzetc.config.default_ocr_engine, "
+                "'default_model': openzetc.config.default_model, "
+                "'factory_loaded': 'openzetc.knowledge.parser.factory' in sys.modules, "
+                "'parser_loaded': 'openzetc.knowledge.parser.unified' in sys.modules, "
+                "'manager_loaded': 'openzetc.knowledge.manager' in sys.modules"
                 "}))"
             ),
         ],
@@ -75,7 +75,7 @@ def _import_yuxi_in_fresh_process(tmp_path, config_text: str) -> tuple[dict, sub
 
 
 def test_fresh_import_loads_default_ocr_engine_without_initializing_knowledge_runtime(tmp_path):
-    loaded, result = _import_yuxi_in_fresh_process(
+    loaded, result = _import_openzetc_in_fresh_process(
         tmp_path,
         'default_ocr_engine = "rapid_ocr"\ndefault_model = "test-provider:after-ocr"\n',
     )
@@ -91,7 +91,7 @@ def test_fresh_import_loads_default_ocr_engine_without_initializing_knowledge_ru
 
 
 def test_fresh_import_ignores_invalid_ocr_engine_and_loads_later_config(tmp_path):
-    loaded, _ = _import_yuxi_in_fresh_process(
+    loaded, _ = _import_openzetc_in_fresh_process(
         tmp_path,
         'default_ocr_engine = "unknown-ocr"\ndefault_model = "test-provider:after-invalid-ocr"\n',
     )
@@ -260,7 +260,7 @@ def test_dump_config_hides_save_dir(tmp_path):
 
 
 def test_resolve_chat_model_spec_reads_runtime_refreshed_default(tmp_path, monkeypatch):
-    from yuxi.agents import models
+    from openzetc.agents import models
 
     payload = {"default_model": "test-provider:resolved-chat"}
     _patch_runtime_redis(monkeypatch, _FakeRedis(raw=json.dumps(payload)))

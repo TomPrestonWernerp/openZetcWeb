@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from yuxi.utils.share_config import normalize_share_config
+from openzetc.utils.share_config import normalize_share_config
 
 
 def test_normalize_share_config_defaults_to_global() -> None:

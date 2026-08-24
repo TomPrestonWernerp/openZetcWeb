@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-import yuxi.agents.backends.knowledge_base_backend as knowledge_base_backend
+import openzetc.agents.backends.knowledge_base_backend as knowledge_base_backend
 
 
 @pytest.mark.asyncio
 async def test_resolve_visible_knowledge_bases_requires_slug(monkeypatch):
-    import yuxi.knowledge.runtime as knowledge_runtime
+    import openzetc.knowledge.runtime as knowledge_runtime
 
     async def fake_get_databases_by_uid(_uid):
         return {"databases": [{"id": "legacy-id", "name": "Legacy"}]}

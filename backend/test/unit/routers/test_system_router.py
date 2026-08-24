@@ -21,7 +21,7 @@ def test_discovery_endpoint_is_public(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["name"] == "Yuxi"
+    assert payload["name"] == "openZetc"
     assert payload["version"] == "0.7.1.dev0"
     assert payload["api_prefix"] == "/api"
     assert payload["capabilities"]["cli"]["browser_login"] is True
@@ -75,7 +75,7 @@ def test_infrastructure_config_endpoint_uses_superadmin_service(monkeypatch):
         return expected
 
     monkeypatch.setattr(
-        "yuxi.services.infrastructure_config_service.get_infrastructure_config",
+        "openzetc.services.infrastructure_config_service.get_infrastructure_config",
         get_expected_config,
     )
 
@@ -116,15 +116,15 @@ def test_infrastructure_source_save_activate_and_delete_endpoints(monkeypatch):
         return {"section": section, "deleted_id": source_id}
 
     monkeypatch.setattr(
-        "yuxi.services.infrastructure_config_service.save_infrastructure_source",
+        "openzetc.services.infrastructure_config_service.save_infrastructure_source",
         save_source,
     )
     monkeypatch.setattr(
-        "yuxi.services.infrastructure_config_service.activate_infrastructure_source",
+        "openzetc.services.infrastructure_config_service.activate_infrastructure_source",
         activate_source,
     )
     monkeypatch.setattr(
-        "yuxi.services.infrastructure_config_service.delete_infrastructure_source",
+        "openzetc.services.infrastructure_config_service.delete_infrastructure_source",
         delete_source,
     )
 

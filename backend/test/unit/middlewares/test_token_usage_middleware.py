@@ -6,7 +6,7 @@ import pytest
 from langchain.agents.middleware.types import ExtendedModelResponse, ModelResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from yuxi.agents.middlewares.token_usage import TokenUsageMiddleware
+from openzetc.agents.middlewares.token_usage import TokenUsageMiddleware
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from yuxi.services import conversation_service as cs
+from openzetc.services import conversation_service as cs
 
 
 class _DummyUpload:

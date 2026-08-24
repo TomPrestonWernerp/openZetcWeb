@@ -8,10 +8,10 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from yuxi.services.chat_service import stream_agent_chat
-from yuxi.services.input_message_service import build_chat_input_message
-from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import User
+from openzetc.services.chat_service import stream_agent_chat
+from openzetc.services.input_message_service import build_chat_input_message
+from openzetc.storage.postgres.manager import pg_manager
+from openzetc.storage.postgres.models_business import User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.e2e, pytest.mark.slow]
 

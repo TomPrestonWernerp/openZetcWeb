@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.agents.skills.service import (
+from openzetc.agents.skills.service import (
     confirm_skill_install_draft,
     create_skill_node,
     delete_skill,
@@ -35,15 +35,15 @@ from yuxi.agents.skills.service import (
     update_skill_file,
     update_skill_share_config,
 )
-from yuxi.services.rbac_service import (
+from openzetc.services.rbac_service import (
     get_user_permission_map,
     has_permission,
     require_permission,
     validate_share_config,
 )
-from yuxi.agents.skills.remote_install import list_remote_skills, search_remote_skills
-from yuxi.storage.postgres.models_business import User
-from yuxi.utils.logging_config import logger
+from openzetc.agents.skills.remote_install import list_remote_skills, search_remote_skills
+from openzetc.storage.postgres.models_business import User
+from openzetc.utils.logging_config import logger
 
 skills = APIRouter(prefix="/system/skills", tags=["skills"])
 user_skills = APIRouter(prefix="/skills", tags=["skills"])

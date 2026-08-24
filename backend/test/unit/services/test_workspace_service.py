@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException, UploadFile
 
-from yuxi.agents.backends.sandbox import paths as workspace_paths
-from yuxi.services import workspace_service as svc
+from openzetc.agents.backends.sandbox import paths as workspace_paths
+from openzetc.services import workspace_service as svc
 
 
 def _user() -> SimpleNamespace:
@@ -119,7 +119,7 @@ async def test_read_workspace_file_content_returns_pdf_preview_for_office_file(
         body += chunk
 
     assert result.media_type == "application/pdf"
-    assert result.headers["x-yuxi-preview-type"] == "pdf"
+    assert result.headers["x-openzetc-preview-type"] == "pdf"
     assert body == b"%PDF-1.4\npreview"
 
 

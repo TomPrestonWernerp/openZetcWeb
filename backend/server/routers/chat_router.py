@@ -8,12 +8,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi import config as conf
-from yuxi.models import select_model
-from yuxi.services.chat_service import get_agent_state_view
-from yuxi.services.conversation_service import (
+from openzetc import config as conf
+from openzetc.models import select_model
+from openzetc.services.chat_service import get_agent_state_view
+from openzetc.services.conversation_service import (
     confirm_tmp_thread_attachments_view,
     create_thread_view,
     delete_thread_attachment_view,
@@ -27,17 +27,17 @@ from yuxi.services.conversation_service import (
     upload_thread_attachment_view,
     upload_tmp_attachment_view,
 )
-from yuxi.services.file_preview import detect_media_type
-from yuxi.services.thread_files_service import (
+from openzetc.services.file_preview import detect_media_type
+from openzetc.services.thread_files_service import (
     list_thread_files_view,
     read_thread_file_content_view,
     resolve_thread_artifact_view,
     save_thread_artifact_to_workspace_view,
 )
-from yuxi.services.feedback_service import get_message_feedback_view, submit_message_feedback_view
-from yuxi.utils.logging_config import logger
-from yuxi.utils.image_processor import process_uploaded_image
-from yuxi.utils.paths import VIRTUAL_PATH_PREFIX
+from openzetc.services.feedback_service import get_message_feedback_view, submit_message_feedback_view
+from openzetc.utils.logging_config import logger
+from openzetc.utils.image_processor import process_uploaded_image
+from openzetc.utils.paths import VIRTUAL_PATH_PREFIX
 
 
 # TODO：当前文件的功能过于庞杂，路由标签混乱

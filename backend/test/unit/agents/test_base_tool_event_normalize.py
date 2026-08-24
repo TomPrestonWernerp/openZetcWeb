@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
-from yuxi.agents.base import _json_safe, _normalize_tool_event_data
+from openzetc.agents.base import _json_safe, _normalize_tool_event_data
 
 
 def _command_tool_finished(tool_call_id: str) -> dict:

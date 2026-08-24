@@ -4,8 +4,8 @@ import json
 from contextlib import contextmanager
 
 import pytest
-import yuxi.models.providers.cache as cache_module
-from yuxi.models.providers.cache import REDIS_CACHE_KEY, ModelCache, ModelInfo
+import openzetc.models.providers.cache as cache_module
+from openzetc.models.providers.cache import REDIS_CACHE_KEY, ModelCache, ModelInfo
 
 pytestmark = pytest.mark.unit
 

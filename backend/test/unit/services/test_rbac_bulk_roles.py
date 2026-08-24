@@ -4,8 +4,8 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.rbac_service import update_users_roles
-from yuxi.storage.postgres.models_business import (
+from openzetc.services.rbac_service import update_users_roles
+from openzetc.storage.postgres.models_business import (
     Department,
     RBACPermission,
     RBACRole,
@@ -35,8 +35,8 @@ async def test_batch_role_update_rejects_removing_last_base_role(monkeypatch):
     async def actor_permissions(*args, **kwargs):
         return {"user.assign_role": "global", "role.assign": "global"}
 
-    monkeypatch.setattr("yuxi.services.rbac_service.require_permission", allow)
-    monkeypatch.setattr("yuxi.services.rbac_service.get_user_permission_map", actor_permissions)
+    monkeypatch.setattr("openzetc.services.rbac_service.require_permission", allow)
+    monkeypatch.setattr("openzetc.services.rbac_service.get_user_permission_map", actor_permissions)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as db:
         department = Department(name="信息部")
@@ -81,8 +81,8 @@ async def test_batch_role_update_rejects_cross_department_role(monkeypatch):
     async def actor_permissions(*args, **kwargs):
         return {"user.assign_role": "global", "role.assign": "global"}
 
-    monkeypatch.setattr("yuxi.services.rbac_service.require_permission", allow)
-    monkeypatch.setattr("yuxi.services.rbac_service.get_user_permission_map", actor_permissions)
+    monkeypatch.setattr("openzetc.services.rbac_service.require_permission", allow)
+    monkeypatch.setattr("openzetc.services.rbac_service.get_user_permission_map", actor_permissions)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as db:
         own_department = Department(name="信息部")

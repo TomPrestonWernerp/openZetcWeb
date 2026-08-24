@@ -9,14 +9,14 @@ import pytest
 
 sys.path.insert(0, os.getcwd())
 
-from yuxi.services.chat_service import (
+from openzetc.services.chat_service import (
     _normalize_interrupt_questions,
     _build_ask_user_question_payload,
     _coerce_interrupt_payload,
     stream_agent_resume,
 )
-from yuxi.services import chat_service as svc
-from yuxi.utils.question_utils import normalize_options
+from openzetc.services import chat_service as svc
+from openzetc.utils.question_utils import normalize_options
 
 
 class _FakeSession:

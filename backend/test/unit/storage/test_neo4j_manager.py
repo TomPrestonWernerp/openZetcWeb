@@ -1,15 +1,15 @@
 import pytest
 
-from yuxi.storage.neo4j import (
+from openzetc.storage.neo4j import (
     Neo4jConnectionManager,
     close_shared_neo4j_connection,
     safe_neo4j_label,
 )
-from yuxi.storage.neo4j import manager as neo4j_manager
+from openzetc.storage.neo4j import manager as neo4j_manager
 
 
 def test_storage_neo4j_exports_manager():
-    import yuxi.storage.neo4j as neo4j_storage
+    import openzetc.storage.neo4j as neo4j_storage
 
     assert neo4j_storage.Neo4jConnectionManager is Neo4jConnectionManager
     assert neo4j_storage.safe_neo4j_label is safe_neo4j_label

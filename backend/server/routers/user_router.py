@@ -10,11 +10,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_current_user, get_db, get_required_user
-from yuxi.config import UserConfig, UserConfigSchema
-from yuxi.storage.minio import upload_image_to_minio
-from yuxi.storage.postgres.models_business import APIKey, AgentEnv, User
-from yuxi.utils.auth_utils import AuthUtils
-from yuxi.utils.datetime_utils import coerce_any_to_utc_datetime, format_utc_datetime, utc_now_naive
+from openzetc.config import UserConfig, UserConfigSchema
+from openzetc.storage.minio import upload_image_to_minio
+from openzetc.storage.postgres.models_business import APIKey, AgentEnv, User
+from openzetc.utils.auth_utils import AuthUtils
+from openzetc.utils.datetime_utils import coerce_any_to_utc_datetime, format_utc_datetime, utc_now_naive
 
 user_router = APIRouter(prefix="/user", tags=["user"])
 

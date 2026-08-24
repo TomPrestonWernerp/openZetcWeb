@@ -9,13 +9,13 @@ from deepagents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, get_buffer_string
 from langchain_core.exceptions import ContextOverflowError
 
-from yuxi.agents.backends.composite import create_agent_composite_backend
-from yuxi.agents.middlewares.summary import (
-    YuxiSummarizationMiddleware,
+from openzetc.agents.backends.composite import create_agent_composite_backend
+from openzetc.agents.middlewares.summary import (
+    OpenZetcSummarizationMiddleware,
     create_summary_middleware,
     sanitize_messages_for_summary,
 )
-from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
+from openzetc.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
 
 
 class _DummyModel:
@@ -132,17 +132,17 @@ def _content_char_counter(messages, **_kwargs) -> int:
 
 @pytest.fixture
 def compression_events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    """捕获 YuxiSummarizationMiddleware 通过 stream writer 推送的压缩事件。"""
+    """捕获 OpenZetcSummarizationMiddleware 通过 stream writer 推送的压缩事件。"""
     emitted: list[dict] = []
     monkeypatch.setattr(
-        "yuxi.agents.middlewares.summary.get_stream_writer",
+        "openzetc.agents.middlewares.summary.get_stream_writer",
         lambda: lambda payload: emitted.append(payload),
     )
     return emitted
 
 
 @pytest.mark.unit
-def test_create_summary_middleware_uses_deepagents_with_yuxi_outputs_root() -> None:
+def test_create_summary_middleware_uses_deepagents_with_openzetc_outputs_root() -> None:
     middleware = create_summary_middleware(
         model=_DummyModel(),
         trigger=("tokens", 90_000),
@@ -151,7 +151,7 @@ def test_create_summary_middleware_uses_deepagents_with_yuxi_outputs_root() -> N
     )
 
     assert isinstance(middleware, SummarizationMiddleware)
-    assert isinstance(middleware, YuxiSummarizationMiddleware)
+    assert isinstance(middleware, OpenZetcSummarizationMiddleware)
     assert middleware._backend is create_agent_composite_backend
     assert middleware._history_path_prefix == VIRTUAL_PATH_CONVERSATION_HISTORY
     assert middleware._large_tool_results_prefix == VIRTUAL_PATH_LARGE_TOOL_RESULTS
@@ -299,7 +299,7 @@ def test_wrap_model_call_offloads_large_tool_messages_in_l1_without_state_mutati
         AIMessage(content="资料已整理"),
         HumanMessage(content="继续"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=model,
         backend=backend,
         trigger=("tokens", 500),
@@ -375,7 +375,7 @@ async def test_awrap_model_call_emits_completed_for_l1_without_summary(
         ToolMessage(content=large_result, tool_call_id="call-1", name="query_kb"),
         HumanMessage(content="继续"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=_RecordingModel(),
         backend=backend,
         trigger=("tokens", 500),
@@ -433,7 +433,7 @@ def test_wrap_model_call_truncates_large_write_file_args_only_in_l1_view() -> No
         ToolMessage(content="ok", tool_call_id="call-1", name="write_file"),
         HumanMessage(content="继续"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=_RecordingModel(),
         backend=backend,
         trigger=("tokens", 500),
@@ -478,7 +478,7 @@ def test_wrap_model_call_offloads_tool_messages_outside_keep_window_when_summary
         AIMessage(content="可以继续"),
         HumanMessage(content="新问题"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=model,
         backend=backend,
         trigger=("tokens", 500),
@@ -523,7 +523,7 @@ def test_l1_offload_uses_summary_tool_result_preview_limit_for_l2_summary() -> N
         AIMessage(content="资料已整理"),
         HumanMessage(content="继续"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=model,
         backend=backend,
         trigger=("tokens", 500),
@@ -559,7 +559,7 @@ def test_summary_event_reuses_original_preserved_window_on_later_calls() -> None
         AIMessage(content="资料已整理"),
         HumanMessage(content="继续"),
     ]
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=_RecordingModel(),
         backend=backend,
         trigger=("messages", 5),
@@ -613,7 +613,7 @@ def test_summary_event_reuses_original_preserved_window_on_later_calls() -> None
 def test_create_summary_uses_sanitized_messages() -> None:
     backend = _MemoryBackend()
     model = _RecordingModel()
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=model,
         backend=backend,
         trigger=("messages", 3),
@@ -637,7 +637,7 @@ def test_create_summary_uses_sanitized_messages() -> None:
 @pytest.mark.unit
 def test_offload_history_uses_tool_messages_with_replaced_content() -> None:
     backend = _MemoryBackend()
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=_DummyModel(),
         backend=backend,
         trigger=("messages", 3),
@@ -663,9 +663,9 @@ def test_offload_history_uses_tool_messages_with_replaced_content() -> None:
     assert "TOOL_RESULT_SHOULD_NOT_BE_SUMMARIZED" not in history_content
 
 
-def _make_compressing_middleware(backend: _MemoryBackend) -> tuple[YuxiSummarizationMiddleware, str]:
+def _make_compressing_middleware(backend: _MemoryBackend) -> tuple[OpenZetcSummarizationMiddleware, str]:
     large_result = "BEGIN\n" + ("raw result payload\n" * 200)
-    middleware = YuxiSummarizationMiddleware(
+    middleware = OpenZetcSummarizationMiddleware(
         model=_RecordingModel(),
         backend=backend,
         trigger=("tokens", 500),
@@ -707,7 +707,7 @@ async def test_awrap_model_call_emits_started_and_completed_when_summary_trigger
     assert isinstance(result, ExtendedModelResponse)
     statuses = [event["status"] for event in compression_events]
     assert statuses == ["started", "completed"]
-    assert all(event["type"] == "yuxi.context_compression" for event in compression_events)
+    assert all(event["type"] == "openzetc.context_compression" for event in compression_events)
     completed = compression_events[-1]
     assert isinstance(completed.get("cutoff_index"), int)
     assert completed.get("file_path") is not None

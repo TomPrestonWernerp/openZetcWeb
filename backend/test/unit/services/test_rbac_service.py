@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from yuxi.services.rbac_service import (
+from openzetc.services.rbac_service import (
     BUILTIN_ROLE_GRANTS,
     PERMISSION_CODES,
     scope_allows,
@@ -46,7 +46,7 @@ async def test_own_share_permission_cannot_publish_global(monkeypatch):
     async def fake_require_permission(*args, **kwargs):
         return "own"
 
-    monkeypatch.setattr("yuxi.services.rbac_service.require_permission", fake_require_permission)
+    monkeypatch.setattr("openzetc.services.rbac_service.require_permission", fake_require_permission)
     with pytest.raises(HTTPException, match="不能共享到全公司"):
         await validate_share_config(
             SimpleNamespace(),
@@ -61,7 +61,7 @@ async def test_department_share_is_restricted_to_current_department(monkeypatch)
     async def fake_require_permission(*args, **kwargs):
         return "department"
 
-    monkeypatch.setattr("yuxi.services.rbac_service.require_permission", fake_require_permission)
+    monkeypatch.setattr("openzetc.services.rbac_service.require_permission", fake_require_permission)
     result = await validate_share_config(
         SimpleNamespace(),
         make_user(),

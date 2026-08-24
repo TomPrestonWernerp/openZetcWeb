@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.skills import remote_install as svc
+from openzetc.agents.skills import remote_install as svc
 
 
 def test_parse_available_skills_from_cli_output() -> None:

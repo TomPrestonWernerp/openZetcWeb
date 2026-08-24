@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from yuxi.services.resource_submission_service import sanitize_manifest, validate_skill_package
+from openzetc.services.resource_submission_service import sanitize_manifest, validate_skill_package
 
 
 def _skill_zip(*, entry_name: str = "weekly-report/SKILL.md") -> bytes:

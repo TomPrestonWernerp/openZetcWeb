@@ -1,6 +1,6 @@
 # 文档处理与 OCR
 
-Yuxi 将上传文件先保存为原文件，再解析为 Markdown 并按知识库分块策略入库。OCR 引擎既可在系统设置中作为默认值配置，也可在知识库上传或临时附件解析时逐次选择；未显式选择时使用 `default_ocr_engine`。
+openZetc 将上传文件先保存为原文件，再解析为 Markdown 并按知识库分块策略入库。OCR 引擎既可在系统设置中作为默认值配置，也可在知识库上传或临时附件解析时逐次选择；未显式选择时使用 `default_ocr_engine`。
 
 ## 支持的文件类型
 
@@ -31,12 +31,12 @@ Yuxi 将上传文件先保存为原文件，再解析为 Markdown 并按知识�
 
 知识库支持先从 URL 抓取页面内容，再作为文件进入现有上传、解析与入库链路：
 
-1. 配置 `YUXI_URL_WHITELIST` 环境变量启用白名单机制
+1. 配置 `OPENZETC_URL_WHITELIST` 环境变量启用白名单机制
 2. 系统自动将 HTML 转换为 Markdown
 3. 内置去重机制，避免重复抓取
 
 ::: tip URL 白名单配置
-示例：`YUXI_URL_WHITELIST=github.com,*.wikipedia.org,docs.python.org`
+示例：`OPENZETC_URL_WHITELIST=github.com,*.wikipedia.org,docs.python.org`
 :::
 
 ## OCR 方案选择

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.base import BaseAgent
+from openzetc.agents.base import BaseAgent
 
 
 class _FakeGraph:
@@ -31,7 +31,7 @@ class _TestAgent(BaseAgent):
         return self._graph
 
 
-_TestAgent.__module__ = "yuxi.agents.tests.fake"
+_TestAgent.__module__ = "openzetc.agents.tests.fake"
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_base_agent_stream_messages_passes_callbacks_metadata_and_tags():
         input_context={"uid": "user-1", "thread_id": "thread-1"},
         callbacks=["handler-1"],
         metadata={"langfuse_user_id": "user-1"},
-        tags=["yuxi"],
+        tags=["openzetc"],
     ):
         items.append(item)
 
@@ -55,7 +55,7 @@ async def test_base_agent_stream_messages_passes_callbacks_metadata_and_tags():
         "recursion_limit": 300,
         "callbacks": ["handler-1"],
         "metadata": {"langfuse_user_id": "user-1"},
-        "tags": ["yuxi"],
+        "tags": ["openzetc"],
     }
 
 
@@ -68,7 +68,7 @@ async def test_base_agent_invoke_messages_passes_callbacks_metadata_and_tags():
         input_context={"uid": "user-1", "thread_id": "thread-1"},
         callbacks=["handler-1"],
         metadata={"langfuse_user_id": "user-1"},
-        tags=["yuxi"],
+        tags=["openzetc"],
     )
 
     graph = await agent.get_graph()
@@ -77,7 +77,7 @@ async def test_base_agent_invoke_messages_passes_callbacks_metadata_and_tags():
         "recursion_limit": 300,
         "callbacks": ["handler-1"],
         "metadata": {"langfuse_user_id": "user-1"},
-        "tags": ["yuxi"],
+        "tags": ["openzetc"],
     }
 
 

@@ -8,9 +8,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from server.utils.auth_middleware import get_required_user
-from yuxi.knowledge.factory import KnowledgeBaseFactory
-from yuxi.knowledge.runtime import knowledge_base
-from yuxi.services.workspace_service import (
+from openzetc.knowledge.factory import KnowledgeBaseFactory
+from openzetc.knowledge.runtime import knowledge_base
+from openzetc.services.workspace_service import (
     create_workspace_directory,
     delete_workspace_path,
     download_workspace_file,
@@ -19,7 +19,7 @@ from yuxi.services.workspace_service import (
     upload_workspace_files,
     write_workspace_file_content,
 )
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 workspace = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -119,8 +119,8 @@ def _binary_preview_response(data: dict) -> StreamingResponse:
         media_type=data.get("media_type") or "application/octet-stream",
         headers={
             "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
-            "X-Yuxi-Preview-Type": preview_type,
-            "X-Yuxi-Preview-Filename": quote(filename),
+            "X-openZetc-Preview-Type": preview_type,
+            "X-openZetc-Preview-Filename": quote(filename),
         },
     )
 

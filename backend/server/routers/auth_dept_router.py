@@ -10,19 +10,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete as sqlalchemy_delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import APIKey, Department, User
-from yuxi.repositories.department_repository import DepartmentRepository
-from yuxi.repositories.user_repository import UserRepository
+from openzetc.storage.postgres.models_business import APIKey, Department, User
+from openzetc.repositories.department_repository import DepartmentRepository
+from openzetc.repositories.user_repository import UserRepository
 from server.utils.auth_middleware import get_required_user, get_admin_user, get_db
-from yuxi.utils.auth_utils import AuthUtils
-from yuxi.services.operation_log_service import log_operation
-from yuxi.services.user_identity_service import is_valid_phone_number
-from yuxi.services.knowledge_permission_service import (
+from openzetc.utils.auth_utils import AuthUtils
+from openzetc.services.operation_log_service import log_operation
+from openzetc.services.user_identity_service import is_valid_phone_number
+from openzetc.services.knowledge_permission_service import (
     KNOWLEDGE_PERMISSION_KEYS,
     normalize_department_role_permissions,
     normalize_permission_policy,
 )
-from yuxi.services.rbac_service import require_permission, sync_user_system_role
+from openzetc.services.rbac_service import require_permission, sync_user_system_role
 
 # 创建路由器
 department = APIRouter(prefix="/departments", tags=["department"])

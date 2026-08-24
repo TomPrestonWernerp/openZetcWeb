@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from yuxi.knowledge.chunking.ragflow_like.presets import CHUNK_PRESET_IDS
+from openzetc.knowledge.chunking.ragflow_like.presets import CHUNK_PRESET_IDS
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

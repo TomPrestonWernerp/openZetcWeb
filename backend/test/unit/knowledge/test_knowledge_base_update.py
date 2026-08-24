@@ -1,8 +1,8 @@
 import asyncio
 import types
 
-from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
-from yuxi.knowledge.base import KnowledgeBase
+from openzetc.knowledge.chunking.ragflow_like.nlp import count_tokens
+from openzetc.knowledge.base import KnowledgeBase
 
 
 class FakeKnowledgeBase(KnowledgeBase):
@@ -154,7 +154,7 @@ async def test_create_database_persists_allowed_record_fields(tmp_path, monkeypa
             raise AssertionError("create_database should insert new database metadata")
 
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository",
+        "openzetc.repositories.knowledge_base_repository.KnowledgeBaseRepository",
         FakeKnowledgeBaseRepository,
     )
 
@@ -249,7 +249,7 @@ async def test_refresh_database_stats_persists_metadata(tmp_path, monkeypatch):
         persisted_kbs.append((kb_id, dict(kb.databases_meta[kb_id]["metadata"])))
 
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository",
+        "openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository",
         lambda: file_repo,
     )
     kb._persist_kb = persist_kb
@@ -295,9 +295,9 @@ async def test_repair_missing_file_stats_updates_files_and_database_metadata(tmp
     async def persist_kb(kb_id):
         persisted_kbs.append((kb_id, dict(kb.databases_meta[kb_id]["metadata"])))
 
-    monkeypatch.setattr("yuxi.repositories.knowledge_chunk_repository.KnowledgeChunkRepository", FakeChunkRepo)
+    monkeypatch.setattr("openzetc.repositories.knowledge_chunk_repository.KnowledgeChunkRepository", FakeChunkRepo)
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository",
+        "openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository",
         lambda: file_repo,
     )
     kb._persist_kb = persist_kb
@@ -361,9 +361,9 @@ async def test_repair_missing_file_stats_skips_unindexed_files(tmp_path, monkeyp
     async def persist_kb(kb_id):
         pass
 
-    monkeypatch.setattr("yuxi.repositories.knowledge_chunk_repository.KnowledgeChunkRepository", FakeChunkRepo)
+    monkeypatch.setattr("openzetc.repositories.knowledge_chunk_repository.KnowledgeChunkRepository", FakeChunkRepo)
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository",
+        "openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository",
         lambda: file_repo,
     )
     kb._persist_kb = persist_kb

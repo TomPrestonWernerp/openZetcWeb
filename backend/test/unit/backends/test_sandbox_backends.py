@@ -11,15 +11,15 @@ from deepagents.backends.protocol import GlobResult, ReadResult
 from deepagents.backends.sandbox import MAX_BINARY_BYTES
 from langchain_core.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolRuntime
-from yuxi.agents.backends.composite import (
+from openzetc.agents.backends.composite import (
     CustomCompositeBackend,
     create_agent_composite_backend,
     create_agent_filesystem_middleware,
 )
-from yuxi.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
-from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
-from yuxi.agents.middlewares.skills import SkillsMiddleware
-from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
+from openzetc.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
+from openzetc.agents.backends.sandbox.backend import ProvisionerSandboxBackend
+from openzetc.agents.middlewares.skills import SkillsMiddleware
+from openzetc.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
 
 
 def _runtime(
@@ -43,7 +43,7 @@ def _runtime(
 
 
 def test_create_agent_composite_backend_uses_prepared_readable_skills(monkeypatch):
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
 
     backend = create_agent_composite_backend(
         _runtime(readable_skills=["reporter"], visible_kbs=[{"slug": "db-1", "name": "Docs"}])
@@ -62,7 +62,7 @@ def test_create_agent_composite_backend_requires_thread_id():
 
 
 def test_create_agent_composite_backend_ignores_unprepared_context_skills(monkeypatch):
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
 
     backend = create_agent_composite_backend(_runtime(skills=["configured"], readable_skills=None))
 
@@ -70,7 +70,7 @@ def test_create_agent_composite_backend_ignores_unprepared_context_skills(monkey
 
 
 def test_create_agent_composite_backend_uses_split_thread_scopes(monkeypatch):
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     runtime = _runtime(thread_id="child-thread", uid="user-1", readable_skills=["worker-skill"])
     runtime.config["configurable"].update(
         {"file_thread_id": "parent-thread", "skills_thread_id": "child-skills-thread"}
@@ -85,7 +85,7 @@ def test_create_agent_composite_backend_uses_split_thread_scopes(monkeypatch):
 
 
 def test_create_agent_composite_backend_uses_split_thread_scopes_from_state(monkeypatch):
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     runtime = _runtime(thread_id="child-thread", uid="user-1", readable_skills=["worker-skill"])
     runtime.state = {"file_thread_id": "parent-thread", "skills_thread_id": "child-skills-thread"}
 
@@ -97,7 +97,7 @@ def test_create_agent_composite_backend_uses_split_thread_scopes_from_state(monk
 
 
 def test_create_agent_filesystem_middleware_uses_context_scope(monkeypatch):
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     context = SimpleNamespace(
         thread_id="child-thread",
         uid="user-1",
@@ -233,7 +233,7 @@ def test_sandbox_id_for_thread_includes_skills_scope():
 
 
 def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> None:
-    from yuxi.agents.backends.sandbox.provider import ProvisionerSandboxProvider
+    from openzetc.agents.backends.sandbox.provider import ProvisionerSandboxProvider
 
     created = []
 
@@ -252,7 +252,7 @@ def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> 
     provider._connections = {}
     provider._last_touch_at = {}
     provider._touch_interval_seconds = 30
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.provider.load_user_agent_env", lambda uid: {"A": uid})
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.provider.load_user_agent_env", lambda uid: {"A": uid})
 
     sandbox_1 = provider.acquire(
         "child-thread",
@@ -273,7 +273,7 @@ def test_provider_uses_distinct_sandbox_scope_for_different_uid(monkeypatch) -> 
 
 
 def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch) -> None:
-    from yuxi.agents.backends.sandbox.provider import ProvisionerSandboxProvider
+    from openzetc.agents.backends.sandbox.provider import ProvisionerSandboxProvider
 
     calls = []
 
@@ -292,7 +292,7 @@ def test_provider_get_create_if_missing_ensures_expected_split_scope(monkeypatch
     provider._connections = {}
     provider._last_touch_at = {}
     provider._touch_interval_seconds = 30
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.provider.load_user_agent_env", lambda uid: {"A": uid})
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.provider.load_user_agent_env", lambda uid: {"A": uid})
 
     connection = provider.get(
         "child-thread",
@@ -327,9 +327,9 @@ def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
             provider_calls.append((thread_id, kwargs))
             return SimpleNamespace(sandbox_url="http://sandbox")
 
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: FakeProvider())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: FakeProvider())
     monkeypatch.setattr(
-        "yuxi.agents.backends.sandbox.backend.sync_thread_readable_skills",
+        "openzetc.agents.backends.sandbox.backend.sync_thread_readable_skills",
         lambda thread_id, skills: synced.append((thread_id, skills)),
     )
 
@@ -360,7 +360,7 @@ def test_provisioner_uses_file_and_skills_thread_ids(monkeypatch) -> None:
 
 
 def test_provisioner_denies_reads_outside_allowed_roots(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     result = backend.read("/etc/passwd")
@@ -369,7 +369,7 @@ def test_provisioner_denies_reads_outside_allowed_roots(monkeypatch) -> None:
 
 
 def test_provisioner_denies_upload_writes(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     write_result = backend.write("/home/gem/user-data/uploads/blocked.txt", "blocked")
@@ -380,7 +380,7 @@ def test_provisioner_denies_upload_writes(monkeypatch) -> None:
 
 
 def test_provisioner_allows_outputs_writes(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     def _missing_file(path, offset=0, limit=None):
@@ -405,7 +405,7 @@ def test_provisioner_allows_outputs_writes(monkeypatch) -> None:
 
 
 def test_provisioner_glob_root_searches_readable_roots(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     calls = []
 
@@ -427,7 +427,7 @@ def test_provisioner_glob_root_searches_readable_roots(monkeypatch) -> None:
 
 
 def test_provisioner_read_preserves_base64_like_plain_text(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     fake_client = SimpleNamespace(
@@ -442,7 +442,7 @@ def test_provisioner_read_preserves_base64_like_plain_text(monkeypatch) -> None:
 
 
 def test_provisioner_read_decodes_explicit_base64(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     fake_client = SimpleNamespace(
@@ -456,7 +456,7 @@ def test_provisioner_read_decodes_explicit_base64(monkeypatch) -> None:
 
 
 def test_provisioner_read_file_base64_reads_temp_file_not_shell_output(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     expected = base64.b64encode(b"\x89PNG\r\n\x1a\nimage-bytes").decode("ascii")
     shell_calls = []
@@ -471,7 +471,7 @@ def test_provisioner_read_file_base64_reads_temp_file_not_shell_output(monkeypat
         )
 
     def _read_file(**kwargs):
-        assert kwargs["file"].startswith("/tmp/yuxi-read-file-")
+        assert kwargs["file"].startswith("/tmp/openzetc-read-file-")
         return SimpleNamespace(data=SimpleNamespace(content=expected))
 
     fake_client = SimpleNamespace(
@@ -485,11 +485,11 @@ def test_provisioner_read_file_base64_reads_temp_file_not_shell_output(monkeypat
     assert result == expected
     assert len(shell_calls) == 2
     assert shell_calls[0]["command"].startswith("python3 -c")
-    assert shell_calls[1]["command"].startswith("rm -f /tmp/yuxi-read-file-")
+    assert shell_calls[1]["command"].startswith("rm -f /tmp/openzetc-read-file-")
 
 
 def test_provisioner_read_reports_binary_files(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     monkeypatch.setattr(backend, "_file_size_bytes", lambda _path: 8)
     monkeypatch.setattr(backend, "_read_file_base64", lambda _path: "iVBORw0KGgo=")
@@ -502,7 +502,7 @@ def test_provisioner_read_reports_binary_files(monkeypatch) -> None:
 
 
 def test_provisioner_read_treats_known_non_text_extension_as_base64(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     monkeypatch.setattr(backend, "_file_size_bytes", lambda _path: 6)
     monkeypatch.setattr(backend, "_read_binary", lambda path, offset=0, limit=None: pytest.fail("file API used"))
@@ -515,7 +515,7 @@ def test_provisioner_read_treats_known_non_text_extension_as_base64(monkeypatch)
 
 
 def test_provisioner_read_rejects_large_known_binary_before_read(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     read_calls: list[tuple[str, int, int | None]] = []
     monkeypatch.setattr(backend, "_file_size_bytes", lambda _path: MAX_BINARY_BYTES + 1)
@@ -535,7 +535,7 @@ def test_provisioner_read_rejects_large_known_binary_before_read(monkeypatch) ->
 
 
 def test_provisioner_read_rejects_unknown_binary(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     read_calls: list[tuple[str, int, int | None]] = []
 
@@ -553,7 +553,7 @@ def test_provisioner_read_rejects_unknown_binary(monkeypatch) -> None:
 
 
 def test_provisioner_read_rejects_unknown_file_on_sandbox_utf8_decode_failure(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     def _read_binary_raises(path, offset=0, limit=None):
@@ -569,7 +569,7 @@ def test_provisioner_read_rejects_unknown_file_on_sandbox_utf8_decode_failure(mo
 
 @pytest.mark.parametrize("extension", ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"])
 def test_provisioner_read_routes_documents_to_ocr(monkeypatch, extension: str) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     monkeypatch.setattr(backend, "_file_size_bytes", lambda _path: 8)
     monkeypatch.setattr(backend, "_read_binary", lambda *_args, **_kwargs: pytest.fail("document was read"))
@@ -584,7 +584,7 @@ def test_provisioner_read_routes_documents_to_ocr(monkeypatch, extension: str) -
 
 @pytest.mark.parametrize("extension", ["mp3", "mp4", "wav"])
 def test_provisioner_read_rejects_other_known_modalities(monkeypatch, extension: str) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
     monkeypatch.setattr(backend, "_file_size_bytes", lambda _path: 8)
     monkeypatch.setattr(backend, "_read_file_base64", lambda _path: pytest.fail("binary file was read"))
@@ -623,7 +623,7 @@ def test_read_file_tool_returns_multimodal_block_for_small_binary() -> None:
 
 
 def test_provisioner_read_reports_invalid_path(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     result = backend.read("secret.txt")
@@ -632,7 +632,7 @@ def test_provisioner_read_reports_invalid_path(monkeypatch) -> None:
 
 
 def test_provisioner_read_reports_path_traversal(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     result = backend.read("/home/gem/user-data/../secret.txt")
@@ -641,7 +641,7 @@ def test_provisioner_read_reports_path_traversal(monkeypatch) -> None:
 
 
 def test_provisioner_download_files_distinguishes_invalid_path_from_read_failure(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     def _fake_read_binary(path, offset=0, limit=None):
@@ -656,7 +656,7 @@ def test_provisioner_download_files_distinguishes_invalid_path_from_read_failure
 
 
 def test_provisioner_download_files_treats_sandbox_404_as_missing(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     def _missing_from_sandbox(path, offset=0, limit=None):
@@ -670,7 +670,7 @@ def test_provisioner_download_files_treats_sandbox_404_as_missing(monkeypatch) -
 
 
 def test_provisioner_execute_returns_error_response_on_client_failure(monkeypatch) -> None:
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
 
     class _FakeClient:

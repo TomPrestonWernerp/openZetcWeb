@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.services import chat_service as chat_svc
-from yuxi.services import conversation_service as svc
+from openzetc.services import chat_service as chat_svc
+from openzetc.services import conversation_service as svc
 
 
 def test_tmp_attachment_ocr_methods_use_processor_factory():

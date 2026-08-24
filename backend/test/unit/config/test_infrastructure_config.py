@@ -5,8 +5,8 @@ import importlib
 import pytest
 import tomli
 
-from yuxi.config.app import MASKED_SECRET, Config
-from yuxi.storage.postgres.models_business import (
+from openzetc.config.app import MASKED_SECRET, Config
+from openzetc.storage.postgres.models_business import (
     GraphDatabaseConfig,
     ObjectStorageConfig,
     VectorDatabaseConfig,
@@ -63,7 +63,7 @@ def test_infrastructure_config_rejects_unknown_provider(tmp_path):
 
 
 def test_infrastructure_config_is_not_written_to_toml(tmp_path, monkeypatch):
-    config_module = importlib.import_module("yuxi.config.app")
+    config_module = importlib.import_module("openzetc.config.app")
     monkeypatch.setattr(config_module.runtime_cache, "save_runtime_config", lambda _config: None)
     cfg = Config(save_dir=str(tmp_path))
     cfg.update_infrastructure_config(

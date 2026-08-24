@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from yuxi.storage.postgres.manager import PostgresManager
+from openzetc.storage.postgres.manager import PostgresManager
 
 
 class _RecordingConnection:

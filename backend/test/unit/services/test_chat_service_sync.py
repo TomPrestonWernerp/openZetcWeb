@@ -7,9 +7,9 @@ import pytest
 from fastapi import HTTPException
 from langchain.messages import AIMessage, HumanMessage
 
-from yuxi.agents import context as agent_context
-from yuxi.agents.backends.sandbox import paths as workspace_paths
-from yuxi.services import chat_service as svc
+from openzetc.agents import context as agent_context
+from openzetc.agents.backends.sandbox import paths as workspace_paths
+from openzetc.services import chat_service as svc
 
 
 def _empty_agent_context(_thread_id: str, _uid: str) -> str:

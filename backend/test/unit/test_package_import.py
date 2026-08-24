@@ -1,12 +1,12 @@
 import sys
 
 
-def test_import_yuxi_does_not_eagerly_import_knowledge(monkeypatch):
+def test_import_openzetc_does_not_eagerly_import_knowledge(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    sys.modules.pop("yuxi", None)
-    sys.modules.pop("yuxi.knowledge", None)
+    sys.modules.pop("openzetc", None)
+    sys.modules.pop("openzetc.knowledge", None)
 
-    import yuxi
+    import openzetc
 
-    assert yuxi.get_version() == yuxi.__version__
-    assert "yuxi.knowledge" not in sys.modules
+    assert openzetc.get_version() == openzetc.__version__
+    assert "openzetc.knowledge" not in sys.modules

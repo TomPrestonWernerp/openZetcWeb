@@ -4,14 +4,14 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.auth_service import (
+from openzetc.services.auth_service import (
     CLIAuthError,
     approve_cli_auth_session,
     create_cli_auth_session,
     exchange_cli_auth_token,
     get_cli_auth_session_for_user,
 )
-from yuxi.storage.postgres.models_business import Base, Department, User
+from openzetc.storage.postgres.models_business import Base, Department, User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 

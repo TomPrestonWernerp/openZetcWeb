@@ -5,12 +5,12 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.services.agent_invocation_service import (
+from openzetc.services.agent_invocation_service import (
     create_agent_call_run_view,
     create_agent_eval_run_view,
     get_agent_call_run_result_view,
 )
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 from server.utils.auth_middleware import get_db, get_required_user
 

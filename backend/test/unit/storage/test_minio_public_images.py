@@ -1,6 +1,6 @@
 import json
 
-from yuxi.storage.minio.client import MinIOClient, normalize_public_minio_url
+from openzetc.storage.minio.client import MinIOClient, normalize_public_minio_url
 
 
 class FakeMinio:

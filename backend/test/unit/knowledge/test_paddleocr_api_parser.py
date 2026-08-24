@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-import yuxi.knowledge.parser.paddleocr_api as paddleocr_api
-from yuxi.knowledge.parser.base import DocumentParserException
-from yuxi.knowledge.parser.paddleocr_api import PaddleOCRPPOCRv6Parser, PaddleOCRVLParser
+import openzetc.knowledge.parser.paddleocr_api as paddleocr_api
+from openzetc.knowledge.parser.base import DocumentParserException
+from openzetc.knowledge.parser.paddleocr_api import PaddleOCRPPOCRv6Parser, PaddleOCRVLParser
 
 
 @dataclass

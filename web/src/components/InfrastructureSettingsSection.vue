@@ -248,7 +248,7 @@ const providerPresets = {
   vector_database: {
     milvus: {
       uri: 'http://milvus:19530',
-      name: 'yuxi',
+      name: 'openzetc',
       console_url: 'http://localhost:9091/webui/'
     },
     zilliz: { uri: '', name: 'default', console_url: '' },
@@ -348,7 +348,7 @@ const sections = [
         requiredProviders: ['zilliz', 'aliyun_milvus'],
         placeholder: '本机服务可留空'
       },
-      { key: 'name', label: '数据库名称', required: true, placeholder: 'yuxi' },
+      { key: 'name', label: '数据库名称', required: true, placeholder: 'openzetc' },
       { key: 'console_url', label: '管理控制台地址', wide: true, placeholder: '可选' }
     ]
   },

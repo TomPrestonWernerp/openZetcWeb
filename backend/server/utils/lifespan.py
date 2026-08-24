@@ -4,17 +4,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from yuxi.services.task_service import tasker
-from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
-from yuxi.models.providers.service import ensure_builtin_model_providers_in_db
-from yuxi.services.run_queue_service import close_queue_clients, get_redis_client
-from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.neo4j import close_shared_neo4j_connection
-from yuxi.knowledge.runtime import knowledge_base
-from yuxi.utils import logger
-from yuxi.agents.backends.sandbox import init_sandbox_provider, shutdown_sandbox_provider
-from yuxi import get_version
-from yuxi.config import config
+from openzetc.services.task_service import tasker
+from openzetc.agents.mcp.service import ensure_builtin_mcp_servers_in_db
+from openzetc.models.providers.service import ensure_builtin_model_providers_in_db
+from openzetc.services.run_queue_service import close_queue_clients, get_redis_client
+from openzetc.storage.postgres.manager import pg_manager
+from openzetc.storage.neo4j import close_shared_neo4j_connection
+from openzetc.knowledge.runtime import knowledge_base
+from openzetc.utils import logger
+from openzetc.agents.backends.sandbox import init_sandbox_provider, shutdown_sandbox_provider
+from openzetc import get_version
+from openzetc.config import config
 
 
 @asynccontextmanager
@@ -26,12 +26,12 @@ async def lifespan(app: FastAPI):
         await pg_manager.create_tables()
         await pg_manager.ensure_business_schema()
         await pg_manager.ensure_knowledge_schema()
-        from yuxi.services.rbac_service import ensure_rbac_seeded
+        from openzetc.services.rbac_service import ensure_rbac_seeded
 
         async with pg_manager.get_async_session_context() as session:
             await ensure_rbac_seeded(session)
 
-        from yuxi.services.infrastructure_config_service import initialize_infrastructure_config
+        from openzetc.services.infrastructure_config_service import initialize_infrastructure_config
 
         await initialize_infrastructure_config()
     except Exception as e:
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to ensure builtin MCP servers during startup: {e}")
 
     try:
-        from yuxi.agents.skills.service import init_builtin_skills
+        from openzetc.agents.skills.service import init_builtin_skills
 
         async with pg_manager.get_async_session_context() as session:
             await init_builtin_skills(session)
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize builtin skills during startup: {e}")
 
     try:
-        from yuxi.repositories.agent_repository import AgentRepository
+        from openzetc.repositories.agent_repository import AgentRepository
 
         async with pg_manager.get_async_session_context() as session:
             repository = AgentRepository(session)
@@ -72,8 +72,8 @@ async def lifespan(app: FastAPI):
 
     # 初始化模型缓存（v2 模型选择使用）
     try:
-        from yuxi.models.providers.cache import model_cache
-        from yuxi.models.providers.service import get_all_model_providers
+        from openzetc.models.providers.cache import model_cache
+        from openzetc.models.providers.service import get_all_model_providers
 
         async with pg_manager.get_async_session_context() as session:
             providers = await get_all_model_providers(session)
@@ -114,17 +114,11 @@ async def lifespan(app: FastAPI):
 
     await tasker.start()
     logger.info(f"""
-
-░██     ░██                       ░██
- ░██   ░██
-  ░██ ░██   ░██    ░██ ░██    ░██ ░██
-   ░████    ░██    ░██  ░██  ░██  ░██
-    ░██     ░██    ░██   ░█████   ░██
-    ░██     ░██   ░███  ░██  ░██  ░██
-    ░██      ░█████░██ ░██    ░██ ░██  v{get_version()}
-
+╭────────────────────────╮
+│  openZetc  v{get_version():<11}│
+╰────────────────────────╯
     """)
-    logger.info("Yuxi backend startup complete")
+    logger.info("openZetc backend startup complete")
     yield
     await tasker.shutdown()
     shutdown_sandbox_provider()

@@ -1,14 +1,14 @@
-from yuxi.agents.backends.sandbox import (
+from openzetc.agents.backends.sandbox import (
     VIRTUAL_PATH_PREFIX,
     ensure_thread_dirs,
     sandbox_outputs_dir,
     sandbox_uploads_dir,
 )
-from yuxi.agents.buildin.chatbot.state import merge_subagent_runs
-from yuxi.agents.state import merge_artifacts
-from yuxi.agents.toolkits.buildin.tools import _normalize_presented_artifact_path
-from yuxi.services.chat_service import extract_agent_state
-from yuxi.utils.paths import CONVERSATION_HISTORY_DIR_NAME, LARGE_TOOL_RESULTS_DIR_NAME
+from openzetc.agents.buildin.chatbot.state import merge_subagent_runs
+from openzetc.agents.state import merge_artifacts
+from openzetc.agents.toolkits.buildin.tools import _normalize_presented_artifact_path
+from openzetc.services.chat_service import extract_agent_state
+from openzetc.utils.paths import CONVERSATION_HISTORY_DIR_NAME, LARGE_TOOL_RESULTS_DIR_NAME
 
 
 def _runtime_with_thread(thread_id: str, uid: str = "user-1"):

@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.backends.sandbox.paths import (
+from openzetc.agents.backends.sandbox.paths import (
     ensure_thread_dirs,
     sandbox_outputs_dir,
     sandbox_uploads_dir,
     sandbox_workspace_dir,
     virtual_path_for_thread_file,
 )
-from yuxi.agents.toolkits.buildin.tools import ocr_parse_file
-from yuxi.knowledge.parser.unified import Parser
+from openzetc.agents.toolkits.buildin.tools import ocr_parse_file
+from openzetc.knowledge.parser.unified import Parser
 
 pytestmark = pytest.mark.unit
 
@@ -35,7 +35,7 @@ def _runtime(
 
 @pytest.mark.asyncio
 async def test_ocr_parse_file_writes_markdown_to_outputs(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
+    monkeypatch.setattr("openzetc.config.save_dir", str(tmp_path))
     thread_id = "thread-1"
     uid = "user-1"
     ensure_thread_dirs(thread_id, uid)
@@ -73,8 +73,8 @@ async def test_ocr_parse_file_writes_markdown_to_outputs(tmp_path, monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_ocr_parse_file_uses_default_engine(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
-    monkeypatch.setattr("yuxi.config.default_ocr_engine", "rapid_ocr")
+    monkeypatch.setattr("openzetc.config.save_dir", str(tmp_path))
+    monkeypatch.setattr("openzetc.config.default_ocr_engine", "rapid_ocr")
     thread_id = "thread-1"
     uid = "user-1"
     ensure_thread_dirs(thread_id, uid)
@@ -100,7 +100,7 @@ async def test_ocr_parse_file_uses_default_engine(tmp_path, monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_ocr_parse_file_rejects_non_user_data_path(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
+    monkeypatch.setattr("openzetc.config.save_dir", str(tmp_path))
 
     with pytest.raises(ValueError, match="只允许解析"):
         await ocr_parse_file.coroutine(file_path="/etc/passwd", runtime=_runtime())
@@ -108,7 +108,7 @@ async def test_ocr_parse_file_rejects_non_user_data_path(tmp_path, monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_ocr_parse_file_rejects_directory(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
+    monkeypatch.setattr("openzetc.config.save_dir", str(tmp_path))
     thread_id = "thread-1"
     uid = "user-1"
     ensure_thread_dirs(thread_id, uid)
@@ -120,7 +120,7 @@ async def test_ocr_parse_file_rejects_directory(tmp_path, monkeypatch: pytest.Mo
 
 @pytest.mark.asyncio
 async def test_ocr_parse_file_rejects_path_traversal(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
+    monkeypatch.setattr("openzetc.config.save_dir", str(tmp_path))
 
     with pytest.raises(ValueError, match="只允许解析"):
         await ocr_parse_file.coroutine(

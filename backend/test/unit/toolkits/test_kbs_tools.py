@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.toolkits.kbs import tools
+from openzetc.agents.toolkits.kbs import tools
 
 
 def _tool_callable(tool):
@@ -441,7 +441,7 @@ async def test_search_file_returns_files_by_query(monkeypatch) -> None:
     async def _fake_list_by_kb_id_after(self, kb_id, *, after_file_id=None, limit=500, files_only=False):
         return fake_files
 
-    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+    from openzetc.repositories.knowledge_file_repository import KnowledgeFileRepository
 
     monkeypatch.setattr(KnowledgeFileRepository, "list_by_kb_id_after", _fake_list_by_kb_id_after)
 
@@ -484,7 +484,7 @@ async def test_search_file_returns_all_files_when_query_empty(monkeypatch) -> No
     async def _fake_list_by_kb_id_after(self, kb_id, *, after_file_id=None, limit=500, files_only=False):
         return fake_files
 
-    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+    from openzetc.repositories.knowledge_file_repository import KnowledgeFileRepository
 
     monkeypatch.setattr(KnowledgeFileRepository, "list_by_kb_id_after", _fake_list_by_kb_id_after)
 
@@ -517,7 +517,7 @@ async def test_search_file_pagination(monkeypatch) -> None:
     async def _fake_list_by_kb_id_after(self, kb_id, *, after_file_id=None, limit=500, files_only=False):
         return fake_files
 
-    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+    from openzetc.repositories.knowledge_file_repository import KnowledgeFileRepository
 
     monkeypatch.setattr(KnowledgeFileRepository, "list_by_kb_id_after", _fake_list_by_kb_id_after)
 
@@ -569,7 +569,7 @@ async def test_search_file_total_reflects_full_set_not_page(monkeypatch) -> None
         # 真实仓储会按 limit 截断；此 mock 同样遵守 limit，以暴露按 limit+offset 取数导致的 total 失真。
         return fake_files[:limit]
 
-    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+    from openzetc.repositories.knowledge_file_repository import KnowledgeFileRepository
 
     monkeypatch.setattr(KnowledgeFileRepository, "list_by_kb_id_after", _fake_list_by_kb_id_after)
 

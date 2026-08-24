@@ -5,14 +5,14 @@ from fastapi import HTTPException
 from openpyxl import Workbook, load_workbook
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.user_import_service import (
+from openzetc.services.user_import_service import (
     IMPORT_COLUMNS,
     _read_rows,
     create_user_import_template,
     public_import_rows,
     validate_user_import,
 )
-from yuxi.storage.postgres.models_business import (
+from openzetc.storage.postgres.models_business import (
     Department,
     RBACPermission,
     RBACRole,
@@ -64,7 +64,7 @@ def test_public_rows_never_expose_password():
 
 
 def test_read_rows_applies_row_limit(monkeypatch):
-    monkeypatch.setattr("yuxi.services.user_import_service.MAX_IMPORT_ROWS", 1)
+    monkeypatch.setattr("openzetc.services.user_import_service.MAX_IMPORT_ROWS", 1)
     content = _xlsx(
         ("u001", "用户甲", "", "Pass1234", "信息部", ""),
         ("u002", "用户乙", "", "Pass1234", "信息部", ""),

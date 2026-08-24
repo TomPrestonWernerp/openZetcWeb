@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from server.routers import workspace_router
 from server.routers.workspace_router import workspace
 from server.utils.auth_middleware import get_required_user
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 
 class SupportsDocuments:

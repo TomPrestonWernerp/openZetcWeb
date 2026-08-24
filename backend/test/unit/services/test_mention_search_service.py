@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import ormsgpack
-import yuxi.services.mention_search_service as mention_service
+import openzetc.services.mention_search_service as mention_service
 
 
 class _FakeRedis:

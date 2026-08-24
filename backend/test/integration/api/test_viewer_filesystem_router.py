@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 import pytest
-from yuxi.agents.backends.sandbox import (
+from openzetc.agents.backends.sandbox import (
     ensure_thread_dirs,
     sandbox_user_data_dir,
     sandbox_workspace_dir,
@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 def _get_provider():
-    from yuxi.agents.backends import get_sandbox_provider
+    from openzetc.agents.backends import get_sandbox_provider
 
     return get_sandbox_provider()
 
@@ -104,7 +104,7 @@ async def test_viewer_tree_root_does_not_require_sandbox_listing(test_client, st
         def has_entries(self):
             return False
 
-    service_module = importlib.import_module("yuxi.services.viewer_filesystem_service")
+    service_module = importlib.import_module("openzetc.services.viewer_filesystem_service")
 
     async def _fake_resolve_viewer_state(**kwargs):
         return _FailingSandbox(), _EmptyBackend(), []
@@ -140,7 +140,7 @@ async def test_viewer_tree_user_data_uses_local_thread_directory(test_client, st
         def has_entries(self):
             return False
 
-    service_module = importlib.import_module("yuxi.services.viewer_filesystem_service")
+    service_module = importlib.import_module("openzetc.services.viewer_filesystem_service")
 
     async def _fake_resolve_viewer_state(**kwargs):
         return _FailingSandbox(), _EmptyBackend(), []
@@ -475,7 +475,7 @@ async def test_viewer_delete_rejects_protected_user_data_root_directories(
 
 
 async def test_delete_viewer_file_rejects_user_data_root_without_removing(monkeypatch):
-    from yuxi.services import viewer_filesystem_service as service_module
+    from openzetc.services import viewer_filesystem_service as service_module
 
     async def _fake_resolve_viewer_state(**kwargs):
         return object(), object(), []

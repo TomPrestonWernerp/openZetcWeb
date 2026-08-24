@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from yuxi.utils.hash_utils import hash_id, hashstr, subagent_child_thread_id
+from openzetc.utils.hash_utils import hash_id, hashstr, subagent_child_thread_id
 
 
 def test_hashstr_matches_sha256_hex() -> None:

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from server.routers.auth_router import BatchUserDepartmentUpdate, update_users_department
-from yuxi.storage.postgres.models_business import (
+from openzetc.storage.postgres.models_business import (
     Department,
     RBACRole,
     RBACUserRole,

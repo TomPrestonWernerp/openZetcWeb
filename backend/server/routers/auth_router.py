@@ -1,6 +1,6 @@
 from io import BytesIO
 import re
-from yuxi.utils import logger
+from openzetc.utils import logger
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import (
+from openzetc.storage.postgres.manager import pg_manager
+from openzetc.storage.postgres.models_business import (
     APIKey,
     Department,
     OperationLog,
@@ -18,23 +18,23 @@ from yuxi.storage.postgres.models_business import (
     RBACUserRole,
     User,
 )
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.repositories.department_repository import DepartmentRepository
+from openzetc.repositories.user_repository import UserRepository
+from openzetc.repositories.department_repository import DepartmentRepository
 from server.utils.auth_middleware import (
     get_superadmin_user,
     get_db,
     get_required_user,
 )
-from yuxi.utils.auth_utils import AuthUtils
-from yuxi.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
-from yuxi.services.operation_log_service import log_operation
-from yuxi.services.rbac_service import require_permission, sync_user_system_role, update_users_roles
-from yuxi.services.user_import_service import (
+from openzetc.utils.auth_utils import AuthUtils
+from openzetc.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
+from openzetc.services.operation_log_service import log_operation
+from openzetc.services.rbac_service import require_permission, sync_user_system_role, update_users_roles
+from openzetc.services.user_import_service import (
     create_user_import_template,
     public_import_rows,
     validate_user_import,
 )
-from yuxi.services.auth_service import (
+from openzetc.services.auth_service import (
     CLI_AUTH_POLL_INTERVAL_SECONDS,
     CLI_AUTH_SESSION_TTL_SECONDS,
     CLIAuthError,
@@ -43,12 +43,12 @@ from yuxi.services.auth_service import (
     exchange_cli_auth_token,
     get_cli_auth_session_for_user,
 )
-from yuxi.storage.minio import upload_image_to_minio
-from yuxi.storage.minio.client import normalize_public_minio_url
-from yuxi.utils.datetime_utils import utc_now_naive
+from openzetc.storage.minio import upload_image_to_minio
+from openzetc.storage.minio.client import normalize_public_minio_url
+from openzetc.utils.datetime_utils import utc_now_naive
 
 # OIDC 认证相关导入
-from yuxi.services.oidc_service import (
+from openzetc.services.oidc_service import (
     get_oidc_config_handler,
     oidc_callback_handler,
     oidc_exchange_code_handler,

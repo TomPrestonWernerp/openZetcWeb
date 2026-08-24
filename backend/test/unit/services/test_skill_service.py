@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.skills import service as svc
-from yuxi.agents.toolkits import service as tool_service
-from yuxi.storage.postgres.models_business import Skill, User
+from openzetc.agents.skills import service as svc
+from openzetc.agents.toolkits import service as tool_service
+from openzetc.storage.postgres.models_business import Skill, User
 
 
 def _build_zip(files: dict[str, str]) -> bytes:

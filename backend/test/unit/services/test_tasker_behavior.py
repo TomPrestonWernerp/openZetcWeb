@@ -5,8 +5,8 @@
 
 import asyncio
 
-from yuxi.services import task_service
-from yuxi.services.task_service import Tasker
+from openzetc.services import task_service
+from openzetc.services.task_service import Tasker
 
 
 class FakeRecord:

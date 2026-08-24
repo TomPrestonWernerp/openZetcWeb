@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from server.utils import knowledge_permissions
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 
 pytestmark = pytest.mark.asyncio

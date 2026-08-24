@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.services.rbac_service import (
+from openzetc.services.rbac_service import (
     SCOPE_RANK,
     get_user_permission_map,
     get_user_roles,
@@ -20,7 +20,7 @@ from yuxi.services.rbac_service import (
     serialize_role,
     update_users_roles,
 )
-from yuxi.storage.postgres.models_business import (
+from openzetc.storage.postgres.models_business import (
     Department,
     RBACPermission,
     RBACRole,

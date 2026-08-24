@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.buildin.subagent import graph as subagent_graph
+from openzetc.agents.buildin.subagent import graph as subagent_graph
 
 
 class _Request:

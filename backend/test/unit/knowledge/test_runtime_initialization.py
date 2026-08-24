@@ -6,8 +6,8 @@ import subprocess
 import sys
 
 import pytest
-from yuxi.knowledge.parser.factory import DocumentProcessorFactory
-from yuxi.knowledge.parser.registry import PROCESSOR_TYPES
+from openzetc.knowledge.parser.factory import DocumentProcessorFactory
+from openzetc.knowledge.parser.registry import PROCESSOR_TYPES
 
 pytestmark = pytest.mark.unit
 
@@ -24,8 +24,8 @@ def test_knowledge_runtime_preserves_lite_mode(tmp_path):
             sys.executable,
             "-c",
             (
-                "import json; from yuxi.knowledge.runtime import knowledge_base; "
-                "from yuxi.knowledge.factory import KnowledgeBaseFactory; "
+                "import json; from openzetc.knowledge.runtime import knowledge_base; "
+                "from openzetc.knowledge.factory import KnowledgeBaseFactory; "
                 "print(json.dumps({"
                 "'manager': type(knowledge_base).__name__, "
                 "'types': sorted(KnowledgeBaseFactory.get_available_types())"

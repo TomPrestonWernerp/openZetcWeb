@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.knowledge.base import KnowledgeBase
+from openzetc.knowledge.base import KnowledgeBase
 
 
 class FakeKnowledgeBase(KnowledgeBase):
@@ -93,8 +93,8 @@ async def test_load_metadata_does_not_load_file_records(monkeypatch, tmp_path):
     def fail_resolve_processing_params(*args, **kwargs):
         raise AssertionError("startup metadata loading should not normalize every file")
 
-    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository", lambda: FakeKbRepo())
-    monkeypatch.setattr("yuxi.knowledge.base.resolve_processing_params", fail_resolve_processing_params)
+    monkeypatch.setattr("openzetc.repositories.knowledge_base_repository.KnowledgeBaseRepository", lambda: FakeKbRepo())
+    monkeypatch.setattr("openzetc.knowledge.base.resolve_processing_params", fail_resolve_processing_params)
 
     await kb._load_metadata()
 
@@ -124,7 +124,7 @@ async def test_update_file_params_lazy_loads_single_file(monkeypatch, tmp_path):
             )
 
     file_repo = FakeFileRepo()
-    monkeypatch.setattr("yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository", lambda: file_repo)
+    monkeypatch.setattr("openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository", lambda: file_repo)
 
     await kb.update_file_params("db", "file-1", {"chunk_preset_id": "qa"}, operator_id="user-2")
 

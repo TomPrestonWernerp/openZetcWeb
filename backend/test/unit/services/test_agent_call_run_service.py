@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from yuxi.services import agent_invocation_service as svc
-from yuxi.services.input_message_service import build_chat_input_message
+from openzetc.services import agent_invocation_service as svc
+from openzetc.services.input_message_service import build_chat_input_message
 
 
 class _NoExistingRunRepo:

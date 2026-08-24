@@ -5,7 +5,7 @@ import uuid
 import httpx
 import pytest
 
-from yuxi.agents.backends.sandbox import (
+from openzetc.agents.backends.sandbox import (
     ensure_thread_dirs,
     sandbox_outputs_dir,
     sandbox_uploads_dir,

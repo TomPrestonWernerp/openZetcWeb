@@ -9,14 +9,14 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Upload
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
-from yuxi import config
-from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
-from yuxi.knowledge.factory import KnowledgeBaseFactory
-from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
-from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
-from yuxi.knowledge.runtime import knowledge_base
-from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
-from yuxi.knowledge.utils.mindmap_utils import (
+from openzetc import config
+from openzetc.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
+from openzetc.knowledge.factory import KnowledgeBaseFactory
+from openzetc.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
+from openzetc.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
+from openzetc.knowledge.runtime import knowledge_base
+from openzetc.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
+from openzetc.knowledge.utils.mindmap_utils import (
     batch_remove_files_from_mindmap,
     generate_database_mindmap,
     get_database_mindmap_data,
@@ -25,18 +25,18 @@ from yuxi.knowledge.utils.mindmap_utils import (
     get_mindmap_diff,
     remove_file_from_mindmap,
 )
-from yuxi.knowledge.utils.sample_question_utils import (
+from openzetc.knowledge.utils.sample_question_utils import (
     generate_database_sample_questions,
     get_database_sample_questions,
 )
-from yuxi.knowledge.utils.url_fetcher import fetch_url_content
-from yuxi.models.providers.cache import model_cache
-from yuxi.services.task_service import TaskContext, tasker
-from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
-from yuxi.storage.minio.client import StorageError, aupload_file_to_minio, get_minio_client
-from yuxi.storage.postgres.models_business import User
-from yuxi.utils import logger
-from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
+from openzetc.knowledge.utils.url_fetcher import fetch_url_content
+from openzetc.models.providers.cache import model_cache
+from openzetc.services.task_service import TaskContext, tasker
+from openzetc.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
+from openzetc.storage.minio.client import StorageError, aupload_file_to_minio, get_minio_client
+from openzetc.storage.postgres.models_business import User
+from openzetc.utils import logger
+from openzetc.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
 from server.utils.auth_middleware import get_admin_user, get_required_user
 from server.utils.knowledge_permissions import (
@@ -46,13 +46,13 @@ from server.utils.knowledge_permissions import (
     get_knowledge_create_user,
     get_knowledge_manage_user,
 )
-from yuxi.services.knowledge_permission_service import (
+from openzetc.services.knowledge_permission_service import (
     allowed_share_levels,
     database_access_summary,
     get_user_knowledge_permissions,
     normalize_share_config_for_user,
 )
-from yuxi.services.rbac_service import has_permission, require_permission, validate_share_config
+from openzetc.services.rbac_service import has_permission, require_permission, validate_share_config
 from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.auth_middleware import get_db
 
@@ -329,7 +329,7 @@ async def create_database(
         )
 
         # 需要重新加载所有智能体，因为工具刷新了
-        from yuxi.agents.buildin import agent_manager
+        from openzetc.agents.buildin import agent_manager
 
         await agent_manager.reload_all()
 
@@ -553,7 +553,7 @@ async def delete_database(kb_id: str, current_user: User = Depends(get_knowledge
         await knowledge_base.delete_database(kb_id)
 
         # 需要重新加载所有智能体，因为工具刷新了
-        from yuxi.agents.buildin import agent_manager
+        from openzetc.agents.buildin import agent_manager
 
         await agent_manager.reload_all()
 
@@ -1704,7 +1704,7 @@ async def update_knowledge_base_query_params(
             updated_query_params = kb_instance.databases_meta[kb_id]["query_params"]
 
         # 直接通过 Repository 更新单条记录，避免调用 _save_metadata() 遍历所有数据库和文件
-        from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
+        from openzetc.repositories.knowledge_base_repository import KnowledgeBaseRepository
 
         kb_repo = KnowledgeBaseRepository()
         await kb_repo.update(kb_id, {"query_params": updated_query_params})
@@ -2141,7 +2141,7 @@ async def generate_description(
 
     根据知识库名称和现有描述，使用 LLM 生成适合作为智能体工具描述的内容。
     """
-    from yuxi.models import select_model
+    from openzetc.models import select_model
 
     file_list = file_list or []
     logger.debug(f"Generating description for knowledge base: {name}, files: {len(file_list)}")

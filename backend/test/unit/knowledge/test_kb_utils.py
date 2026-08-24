@@ -1,6 +1,6 @@
 import pytest
 
-from yuxi.knowledge.utils.kb_utils import prepare_item_metadata
+from openzetc.knowledge.utils.kb_utils import prepare_item_metadata
 
 
 async def test_prepare_item_metadata_preserves_uploaded_file_size():

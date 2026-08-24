@@ -4,7 +4,7 @@ from io import BytesIO
 
 from docx import Document
 
-from yuxi.services.file_preview import (
+from openzetc.services.file_preview import (
     MAX_TEXT_PREVIEW_CHARS,
     detect_preview_type,
     is_office_pdf_preview_file,

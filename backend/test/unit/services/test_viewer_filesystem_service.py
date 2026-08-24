@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from yuxi.agents.backends.sandbox import paths as sandbox_paths
-from yuxi.services import viewer_filesystem_service as svc
-from yuxi.services import workspace_service
+from openzetc.agents.backends.sandbox import paths as sandbox_paths
+from openzetc.services import viewer_filesystem_service as svc
+from openzetc.services import workspace_service
 
 
 def test_resolve_local_user_data_path_blocks_upload_symlink_escape(tmp_path: Path, monkeypatch) -> None:
@@ -80,5 +80,5 @@ async def test_read_viewer_workspace_office_file_returns_pdf_preview(
         body += chunk
 
     assert response.media_type == "application/pdf"
-    assert response.headers["x-yuxi-preview-type"] == "pdf"
+    assert response.headers["x-openzetc-preview-type"] == "pdf"
     assert body == b"%PDF-1.4\npreview"

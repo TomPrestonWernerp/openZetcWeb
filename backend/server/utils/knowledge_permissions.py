@@ -4,9 +4,9 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.knowledge.runtime import knowledge_base
-from yuxi.services.rbac_service import has_permission, require_permission
-from yuxi.storage.postgres.models_business import User
+from openzetc.knowledge.runtime import knowledge_base
+from openzetc.services.rbac_service import has_permission, require_permission
+from openzetc.storage.postgres.models_business import User
 
 
 async def ensure_knowledge_access(user: User, kb_id: str, db: AsyncSession | None = None) -> dict:
@@ -33,7 +33,7 @@ async def ensure_knowledge_access(user: User, kb_id: str, db: AsyncSession | Non
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该知识库")
 
     if db is None:
-        from yuxi.storage.postgres.manager import pg_manager
+        from openzetc.storage.postgres.manager import pg_manager
 
         async with pg_manager.get_async_session_context() as session:
             await check_access(session)
@@ -52,7 +52,7 @@ async def ensure_knowledge_manage(
     if database is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
     if db is None:
-        from yuxi.storage.postgres.manager import pg_manager
+        from openzetc.storage.postgres.manager import pg_manager
 
         async with pg_manager.get_async_session_context() as session:
             await require_permission(

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from yuxi.knowledge.utils import sample_question_utils as sq
+from openzetc.knowledge.utils import sample_question_utils as sq
 
 
 def test_parse_sample_questions_content_strips_json_fence():

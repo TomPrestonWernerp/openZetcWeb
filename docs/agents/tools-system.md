@@ -1,15 +1,15 @@
 # 工具系统
 
-Yuxi 的工具系统基于注册机制，支持多种工具类型的动态组装。
+openZetc 的工具系统基于注册机制，支持多种工具类型的动态组装。
 
 ## 工具注册机制
 
-Yuxi 的工具系统采用 `@tool` 装饰器注册机制，核心位于 `backend/package/yuxi/agents/toolkits/registry.py`。
+openZetc 的工具系统采用 `@tool` 装饰器注册机制，核心位于 `backend/package/openzetc/agents/toolkits/registry.py`。
 
 ### @tool 装饰器
 
 ```python
-from yuxi.agents.toolkits.registry import tool
+from openzetc.agents.toolkits.registry import tool
 
 @tool(category="buildin", tags=["示例"], display_name="示例工具")
 def example_tool(text: str) -> str:
@@ -28,7 +28,7 @@ def example_tool(text: str) -> str:
 导入 `toolkits` 包时会自动触发注册：
 
 ```python
-from yuxi.agents.toolkits import buildin, debug  # 触发模块内 @tool 装饰器执行
+from openzetc.agents.toolkits import buildin, debug  # 触发模块内 @tool 装饰器执行
 ```
 
 `toolkits/__init__.py` 会导入 `buildin` 与 `debug` 模块；知识库工具由内置 `knowledge-base` Skill 的依赖显式注册，而不是作为所有 Agent 的默认工具。
@@ -52,7 +52,7 @@ Qwen-Image 生成能力已迁移为内置 Skill `image-gen`。模型调用与图
 知识库工具使用 `@tool(category="knowledge")` 注册，并通过内置 `knowledge-base` Skill 的 `tool_dependencies` 按需加载。`get_common_kb_tools()` 仍可用于直接获取完整工具列表：
 
 ```python
-from yuxi.agents.toolkits.kbs import get_common_kb_tools
+from openzetc.agents.toolkits.kbs import get_common_kb_tools
 
 kb_tools = get_common_kb_tools()
 # 返回: [list_kbs, get_mindmap, query_kb, find_kb_document, open_kb_document]
@@ -76,8 +76,8 @@ kb_tools = get_common_kb_tools()
 3. **Skill 依赖工具**：由 `SkillsMiddleware` 在 Skill 激活后按需追加，包括 `knowledge-base` 绑定的知识库工具
 
 ```python
-from yuxi.agents.context import prepare_agent_runtime_context
-from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
+from openzetc.agents.context import prepare_agent_runtime_context
+from openzetc.agents.toolkits.service import resolve_configured_runtime_tools
 
 context = await prepare_agent_runtime_context(context, user=current_user, db=db)
 tools = await resolve_configured_runtime_tools(context)

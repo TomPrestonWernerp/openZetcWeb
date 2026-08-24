@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from server.routers.auth_router import delete_user
 from server.routers.user_router import APIKeyCreate, create_api_key
 from server.utils.auth_middleware import _verify_api_key
-from yuxi.repositories import user_repository as user_repository_module
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.storage.postgres.models_business import APIKey, Base, Department, User
-from yuxi.utils.auth_utils import AuthUtils
+from openzetc.repositories import user_repository as user_repository_module
+from openzetc.repositories.user_repository import UserRepository
+from openzetc.storage.postgres.models_business import APIKey, Base, Department, User
+from openzetc.utils.auth_utils import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 

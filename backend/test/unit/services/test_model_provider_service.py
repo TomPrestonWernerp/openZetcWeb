@@ -4,8 +4,8 @@ import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from yuxi.models.providers.builtin import BUILTIN_PROVIDERS
-from yuxi.models.providers.service import (
+from openzetc.models.providers.builtin import BUILTIN_PROVIDERS
+from openzetc.models.providers.service import (
     check_credential_status,
     _normalize_payload,
     _normalize_remote_model,
@@ -112,7 +112,7 @@ async def test_fetch_remote_models_loads_embedding_only_when_capability_enabled(
         calls.append((endpoint, model_type))
         return [{"id": f"{model_type}-model", "type": model_type}]
 
-    monkeypatch.setattr("yuxi.models.providers.service._fetch_models_from_endpoint", fake_fetch)
+    monkeypatch.setattr("openzetc.models.providers.service._fetch_models_from_endpoint", fake_fetch)
 
     class Provider:
         base_url = "https://example.com/v1"

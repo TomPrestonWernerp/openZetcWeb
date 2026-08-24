@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.knowledge.base import KnowledgeBase
-from yuxi.services.file_preview import MAX_BINARY_PREVIEW_SIZE_BYTES
+from openzetc.knowledge.base import KnowledgeBase
+from openzetc.services.file_preview import MAX_BINARY_PREVIEW_SIZE_BYTES
 
 
 class FakeKnowledgeBase(KnowledgeBase):
@@ -120,8 +120,8 @@ async def test_read_office_pdf_preview_converts_and_caches_pdf(tmp_path, monkeyp
         assert content == b"office"
         return b"%PDF-1.4\nconverted"
 
-    monkeypatch.setattr("yuxi.storage.minio.get_minio_client", lambda: minio_client)
-    monkeypatch.setattr("yuxi.knowledge.base.convert_office_to_pdf", fake_convert)
+    monkeypatch.setattr("openzetc.storage.minio.get_minio_client", lambda: minio_client)
+    monkeypatch.setattr("openzetc.knowledge.base.convert_office_to_pdf", fake_convert)
 
     response = await kb.read_file_preview("db1", "file1")
     cached_response = await kb.read_file_preview("db1", "file1")
@@ -142,7 +142,7 @@ async def test_non_docx_pptx_office_files_do_not_get_pdf_preview(tmp_path, monke
     kb.test_file_meta["filename"] = "demo.xlsx"
     minio_client = FakeMinioClient()
     minio_client.objects[("knowledgebases", "db1/upload/demo.docx")] = b"PK\x03\x04excel"
-    monkeypatch.setattr("yuxi.storage.minio.get_minio_client", lambda: minio_client)
+    monkeypatch.setattr("openzetc.storage.minio.get_minio_client", lambda: minio_client)
 
     entry = kb._knowledge_file_entry("db1", "file1", kb.test_file_meta)
     response = await kb.read_file_preview("db1", "file1")

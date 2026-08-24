@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
-import yuxi.services.run_worker as run_worker
+import openzetc.services.run_worker as run_worker
 
 
 class _RaisingAsyncIter:

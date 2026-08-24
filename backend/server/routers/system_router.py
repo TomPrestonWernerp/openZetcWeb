@@ -7,9 +7,9 @@ import aiofiles
 import httpx
 import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
-from yuxi import config, get_version
-from yuxi.storage.postgres.models_business import User
-from yuxi.utils.logging_config import logger
+from openzetc import config, get_version
+from openzetc.storage.postgres.models_business import User
+from openzetc.utils.logging_config import logger
 
 from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
 
@@ -41,7 +41,7 @@ async def health_check():
 async def discovery():
     """系统能力发现接口（公开接口）"""
     return {
-        "name": "Yuxi",
+        "name": "openZetc",
         "version": get_version(),
         "api_prefix": "/api",
         "capabilities": {
@@ -102,7 +102,7 @@ async def update_config_batch(items: dict = Body(...), current_user: User = Depe
 @system.get("/infrastructure-config")
 async def get_infrastructure_settings(current_user: User = Depends(get_superadmin_user)) -> dict:
     """获取已脱敏的对象存储、向量数据库和图数据库配置。"""
-    from yuxi.services.infrastructure_config_service import get_infrastructure_config
+    from openzetc.services.infrastructure_config_service import get_infrastructure_config
 
     return await get_infrastructure_config()
 
@@ -114,7 +114,7 @@ async def update_infrastructure_settings(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """保存单类基础设施配置，密钥掩码表示保留原值。"""
-    from yuxi.services.infrastructure_config_service import save_infrastructure_config
+    from openzetc.services.infrastructure_config_service import save_infrastructure_config
 
     try:
         return await save_infrastructure_config(section, values, updated_by_uid=current_user.uid)
@@ -131,7 +131,7 @@ async def save_infrastructure_source_settings(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """新增或修改一个对象存储、向量数据库或图数据库来源。"""
-    from yuxi.services.infrastructure_config_service import save_infrastructure_source
+    from openzetc.services.infrastructure_config_service import save_infrastructure_source
 
     try:
         return await save_infrastructure_source(
@@ -152,7 +152,7 @@ async def activate_infrastructure_source_settings(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """将指定来源设为该类型当前唯一的激活配置。"""
-    from yuxi.services.infrastructure_config_service import activate_infrastructure_source
+    from openzetc.services.infrastructure_config_service import activate_infrastructure_source
 
     try:
         return await activate_infrastructure_source(section, source_id)
@@ -167,7 +167,7 @@ async def delete_infrastructure_source_settings(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """删除一个未激活的基础设施来源。"""
-    from yuxi.services.infrastructure_config_service import delete_infrastructure_source
+    from openzetc.services.infrastructure_config_service import delete_infrastructure_source
 
     try:
         return await delete_infrastructure_source(section, source_id)
@@ -182,7 +182,7 @@ async def test_infrastructure_settings(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """使用当前表单值测试基础设施连接，不保存配置。"""
-    from yuxi.services.infrastructure_config_service import test_infrastructure_connection
+    from openzetc.services.infrastructure_config_service import test_infrastructure_connection
 
     try:
         return await test_infrastructure_connection(section, values)
@@ -202,7 +202,7 @@ async def reveal_infrastructure_setting(
     current_user: User = Depends(get_superadmin_user),
 ) -> dict:
     """仅供超级管理员按需读取单个基础设施密钥。"""
-    from yuxi.services.infrastructure_config_service import reveal_infrastructure_secret
+    from openzetc.services.infrastructure_config_service import reveal_infrastructure_secret
 
     try:
         return await reveal_infrastructure_secret(section, field, source=source, source_id=source_id)
@@ -218,7 +218,7 @@ async def get_system_logs(levels: str | None = None, current_user: User = Depend
         levels: 可选的日志级别过滤，多个级别用逗号分隔，如 "INFO,ERROR,DEBUG,WARNING"
     """
     try:
-        from yuxi.utils.logging_config import LOG_FILE
+        from openzetc.utils.logging_config import LOG_FILE
 
         # 解析日志级别过滤条件
         level_filter = None
@@ -262,20 +262,20 @@ async def load_info_config():
     """加载信息配置文件"""
     try:
         # 配置文件路径
-        brand_file_path = os.environ.get("YUXI_BRAND_FILE_PATH", "package/yuxi/config/static/info.local.yaml")
+        brand_file_path = os.environ.get("OPENZETC_BRAND_FILE_PATH", "package/openzetc/config/static/info.local.yaml")
         config_path = Path(brand_file_path)
 
         # 检查文件是否存在
         if not config_path.exists():
             logger.debug(f"The config file {config_path} does not exist, using default config")
-            config_path = Path("package/yuxi/config/static/info.template.yaml")
+            config_path = Path("package/openzetc/config/static/info.template.yaml")
 
         # 异步读取配置文件
         async with aiofiles.open(config_path, encoding="utf-8") as file:
             content = await file.read()
 
         # 注入版本号占位符
-        content = content.replace("{{YUXI_VERSION}}", get_version())
+        content = content.replace("{{OPENZETC_VERSION}}", get_version())
 
         config = yaml.safe_load(content)
 
@@ -365,7 +365,7 @@ async def check_ocr_services_health(current_user: User = Depends(get_admin_user)
     检查所有OCR服务的健康状态
     返回各个OCR服务的可用性信息
     """
-    from yuxi.knowledge.parser.factory import DocumentProcessorFactory
+    from openzetc.knowledge.parser.factory import DocumentProcessorFactory
 
     try:
         # 使用统一的健康检查接口

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.services.knowledge_permission_service import (
+from openzetc.services.knowledge_permission_service import (
     DEFAULT_ROLE_PERMISSIONS,
     allowed_share_levels,
     can_manage_database,

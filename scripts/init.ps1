@@ -1,5 +1,5 @@
-# Yuxi Initialization Script for PowerShell
-# This script helps set up the environment for the Yuxi project
+# openZetc Initialization Script for PowerShell
+# This script helps set up the environment for the openZetc project
 # Note: API keys will be visible during input - use with care
 
 function New-RandomHex($ByteCount) {
@@ -64,15 +64,15 @@ function Ensure-JwtEnv {
         Set-EnvValue "JWT_SECRET_KEY" $JWT_SECRET_KEY
     }
 
-    if (-not (Test-EnvValue "YUXI_INSTANCE_ID")) {
-        Write-Host "YUXI_INSTANCE_ID is missing in .env." -ForegroundColor Yellow
-        $YUXI_INSTANCE_ID = Read-Host "Please enter your YUXI_INSTANCE_ID (press Enter to auto-generate)"
-        if ([string]::IsNullOrEmpty($YUXI_INSTANCE_ID)) {
-            $YUXI_INSTANCE_ID = "instance-$(New-RandomHex 8)"
-            Write-Host "Generated YUXI_INSTANCE_ID and saved it to .env." -ForegroundColor Green
+    if (-not (Test-EnvValue "OPENZETC_INSTANCE_ID")) {
+        Write-Host "OPENZETC_INSTANCE_ID is missing in .env." -ForegroundColor Yellow
+        $OPENZETC_INSTANCE_ID = Read-Host "Please enter your OPENZETC_INSTANCE_ID (press Enter to auto-generate)"
+        if ([string]::IsNullOrEmpty($OPENZETC_INSTANCE_ID)) {
+            $OPENZETC_INSTANCE_ID = "instance-$(New-RandomHex 8)"
+            Write-Host "Generated OPENZETC_INSTANCE_ID and saved it to .env." -ForegroundColor Green
         }
 
-        Set-EnvValue "YUXI_INSTANCE_ID" $YUXI_INSTANCE_ID
+        Set-EnvValue "OPENZETC_INSTANCE_ID" $OPENZETC_INSTANCE_ID
     }
 }
 
@@ -101,7 +101,7 @@ function Test-SkipExistingImage($ImageTag) {
     return $true
 }
 
-Write-Host "🚀 Initializing Yuxi project..." -ForegroundColor Cyan
+Write-Host "🚀 Initializing openZetc project..." -ForegroundColor Cyan
 Write-Host "==================================" -ForegroundColor Cyan
 
 # Check if .env file exists
@@ -142,10 +142,10 @@ if (Test-Path ".env") {
         Write-Host "Generated JWT_SECRET_KEY and saved it to .env." -ForegroundColor Green
     }
 
-    $YUXI_INSTANCE_ID = Read-Host "Please enter your YUXI_INSTANCE_ID (press Enter to auto-generate)"
-    if ([string]::IsNullOrEmpty($YUXI_INSTANCE_ID)) {
-        $YUXI_INSTANCE_ID = "instance-$(New-RandomHex 8)"
-        Write-Host "Generated YUXI_INSTANCE_ID and saved it to .env." -ForegroundColor Green
+    $OPENZETC_INSTANCE_ID = Read-Host "Please enter your OPENZETC_INSTANCE_ID (press Enter to auto-generate)"
+    if ([string]::IsNullOrEmpty($OPENZETC_INSTANCE_ID)) {
+        $OPENZETC_INSTANCE_ID = "instance-$(New-RandomHex 8)"
+        Write-Host "Generated OPENZETC_INSTANCE_ID and saved it to .env." -ForegroundColor Green
     }
 
     $SANDBOX_PROVISIONER_TOKEN = Read-Host "Please enter your SANDBOX_PROVISIONER_TOKEN (press Enter to auto-generate)"
@@ -170,7 +170,7 @@ SILICONFLOW_API_KEY=$apiKey
 
 # JWT security settings
 JWT_SECRET_KEY=$JWT_SECRET_KEY
-YUXI_INSTANCE_ID=$YUXI_INSTANCE_ID
+OPENZETC_INSTANCE_ID=$OPENZETC_INSTANCE_ID
 SANDBOX_PROVISIONER_TOKEN=$SANDBOX_PROVISIONER_TOKEN
 "@
 
@@ -181,7 +181,7 @@ SANDBOX_PROVISIONER_TOKEN=$SANDBOX_PROVISIONER_TOKEN
     Remove-Variable -Name "apiKey" -ErrorAction SilentlyContinue
     Remove-Variable -Name "TAVILY_API_KEY" -ErrorAction SilentlyContinue
     Remove-Variable -Name "JWT_SECRET_KEY" -ErrorAction SilentlyContinue
-    Remove-Variable -Name "YUXI_INSTANCE_ID" -ErrorAction SilentlyContinue
+    Remove-Variable -Name "OPENZETC_INSTANCE_ID" -ErrorAction SilentlyContinue
     Remove-Variable -Name "SANDBOX_PROVISIONER_TOKEN" -ErrorAction SilentlyContinue
 }
 

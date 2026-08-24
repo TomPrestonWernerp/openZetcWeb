@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.agents.backends.sandbox.provider import sandbox_provisioner_token
-from yuxi.agents.backends.sandbox.provisioner_client import ProvisionerClient
+from openzetc.agents.backends.sandbox.provider import sandbox_provisioner_token
+from openzetc.agents.backends.sandbox.provisioner_client import ProvisionerClient
 
 
 def test_provisioner_client_sends_bearer_token(monkeypatch):
@@ -15,7 +15,7 @@ def test_provisioner_client_sends_bearer_token(monkeypatch):
         calls.append(kwargs)
         return SimpleNamespace(status_code=200, json=lambda: {"sandboxes": [], "count": 0})
 
-    monkeypatch.setattr("yuxi.agents.backends.sandbox.provisioner_client.httpx.request", fake_request)
+    monkeypatch.setattr("openzetc.agents.backends.sandbox.provisioner_client.httpx.request", fake_request)
     client = ProvisionerClient(
         "http://sandbox-provisioner:8002",
         token="test-provisioner-token-that-is-long-enough",

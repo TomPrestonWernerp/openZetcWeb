@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.knowledge.manager import KnowledgeBaseManager
+from openzetc.knowledge.manager import KnowledgeBaseManager
 
 pytestmark = pytest.mark.asyncio
 
@@ -110,25 +110,25 @@ def patch_repositories(monkeypatch):
     FakeKnowledgeFileRepository.exists_calls = []
     FakeKnowledgeFileRepository.action_id_calls = []
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository",
+        "openzetc.repositories.knowledge_base_repository.KnowledgeBaseRepository",
         FakeKnowledgeBaseRepository,
     )
     monkeypatch.setattr(
-        "yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository",
+        "openzetc.repositories.knowledge_file_repository.KnowledgeFileRepository",
         FakeKnowledgeFileRepository,
     )
     monkeypatch.setattr(
-        "yuxi.knowledge.manager.KnowledgeBaseFactory.is_type_supported",
+        "openzetc.knowledge.manager.KnowledgeBaseFactory.is_type_supported",
         staticmethod(lambda _kb_type: True),
     )
     monkeypatch.setattr(
-        "yuxi.knowledge.manager.KnowledgeBaseFactory.get_kb_class",
+        "openzetc.knowledge.manager.KnowledgeBaseFactory.get_kb_class",
         staticmethod(lambda _kb_type: FakeKnowledgeBaseClass),
     )
 
 
 async def test_get_database_info_omits_files_by_default():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     result = await manager.get_database_info("kb_1")
 
@@ -139,7 +139,7 @@ async def test_get_database_info_omits_files_by_default():
 
 
 async def test_list_document_files_returns_lightweight_paginated_items():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     result = await manager.list_document_files(
         "kb_1",
@@ -178,7 +178,7 @@ async def test_list_document_files_returns_lightweight_paginated_items():
 
 
 async def test_list_document_files_keeps_virtual_folder_contract():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
     virtual_record = SimpleNamespace(
         file_id="__virtual_folder__:root:资料/",
         kb_id="kb_1",
@@ -208,7 +208,7 @@ async def test_list_document_files_keeps_virtual_folder_contract():
 
 
 async def test_list_document_files_passes_files_only_and_can_omit_stats():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     result = await manager.list_document_files("kb_1", files_only=True, include_stats=False)
 
@@ -228,7 +228,7 @@ async def test_list_document_files_passes_files_only_and_can_omit_stats():
 
 
 async def test_list_document_files_ignores_recursive_without_status_filter():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     result = await manager.list_document_files("kb_1", recursive=True, include_stats=False)
 
@@ -248,7 +248,7 @@ async def test_list_document_files_ignores_recursive_without_status_filter():
 
 
 async def test_document_file_exists_delegates_exact_filename_to_repository():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     assert await manager.document_file_exists("kb_1", " docs/Guide.md ") is True
     assert await manager.document_file_exists("kb_1", "docs/guide.md") is False
@@ -259,7 +259,7 @@ async def test_document_file_exists_delegates_exact_filename_to_repository():
 
 
 async def test_list_document_file_ids_by_statuses_delegates_to_repository():
-    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    manager = KnowledgeBaseManager("/tmp/openzetc-test")
 
     result = await manager.list_document_file_ids_by_statuses(
         "kb_1",

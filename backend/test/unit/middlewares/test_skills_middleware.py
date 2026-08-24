@@ -6,13 +6,13 @@ import pytest
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.types import Command
 
-import yuxi.agents.middlewares.skills as skills_middleware
-from yuxi.agents.middlewares.skills import (
+import openzetc.agents.middlewares.skills as skills_middleware
+from openzetc.agents.middlewares.skills import (
     SkillsMiddleware,
     resolve_runtime_skills_for_context,
     resolve_skill_gated_tools,
 )
-from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
+from openzetc.agents.toolkits.service import resolve_configured_runtime_tools
 
 _KB_TOOL_NAMES = {
     "list_kbs",

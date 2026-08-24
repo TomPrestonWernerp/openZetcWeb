@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yuxi.knowledge.graphs.extractors import (
+from openzetc.knowledge.graphs.extractors import (
     GraphExtractorFactory,
     LLMGraphExtractor,
     normalize_extraction_result,
 )
-from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+from openzetc.knowledge.graphs.milvus_graph_service import MilvusGraphService
 
 
 def _raw_graph_node(node_id: str, *, labels: list[str] | None = None, name: str | None = None) -> dict:

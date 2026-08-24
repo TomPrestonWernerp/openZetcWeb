@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from yuxi.services import infrastructure_config_service as service
+from openzetc.services import infrastructure_config_service as service
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 

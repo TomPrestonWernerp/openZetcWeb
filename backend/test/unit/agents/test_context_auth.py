@@ -9,7 +9,7 @@ import pytest
 
 
 def _load_context_module():
-    return importlib.import_module("yuxi.agents.context")
+    return importlib.import_module("openzetc.agents.context")
 
 
 context_module = _load_context_module()
@@ -105,7 +105,7 @@ async def test_resolve_agent_resource_options_empty_fields_loads_nothing(monkeyp
 
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.knowledge.runtime",
+        "openzetc.knowledge.runtime",
         types.SimpleNamespace(knowledge_base=types.SimpleNamespace(get_databases_by_user=fail_if_loaded)),
     )
 
@@ -142,7 +142,7 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
 
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.toolkits.service",
+        "openzetc.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
                 {"slug": "ask_user_question", "name": "Ask User", "description": ""},
@@ -152,22 +152,22 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.knowledge.runtime",
+        "openzetc.knowledge.runtime",
         types.SimpleNamespace(knowledge_base=types.SimpleNamespace(get_databases_by_user=fake_get_databases_by_user)),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.mcp.service",
+        "openzetc.agents.mcp.service",
         types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.skills.service",
+        "openzetc.agents.skills.service",
         types.SimpleNamespace(list_accessible_skills=fake_list_skills),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.agent_repository",
+        "openzetc.repositories.agent_repository",
         types.SimpleNamespace(AgentRepository=FakeAgentRepository),
     )
 
@@ -263,27 +263,27 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
 
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.backends.knowledge_base_backend",
+        "openzetc.agents.backends.knowledge_base_backend",
         types.SimpleNamespace(resolve_visible_knowledge_bases_for_context=fake_resolve_visible_knowledge_bases),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.middlewares.skills",
+        "openzetc.agents.middlewares.skills",
         types.SimpleNamespace(resolve_runtime_skills_for_context=fake_resolve_runtime_skills_for_context),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.user_repository",
+        "openzetc.repositories.user_repository",
         types.SimpleNamespace(UserRepository=FakeUserRepository),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.storage.postgres.manager",
+        "openzetc.storage.postgres.manager",
         types.SimpleNamespace(pg_manager=types.SimpleNamespace(get_async_session_context=lambda: FakeSessionContext())),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.toolkits.service",
+        "openzetc.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
                 {"slug": "ask_user_question", "name": "Ask User", "description": ""}
@@ -292,22 +292,22 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.knowledge.runtime",
+        "openzetc.knowledge.runtime",
         types.SimpleNamespace(knowledge_base=types.SimpleNamespace(get_databases_by_user=fake_get_databases_by_user)),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.mcp.service",
+        "openzetc.agents.mcp.service",
         types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.skills.service",
+        "openzetc.agents.skills.service",
         types.SimpleNamespace(list_accessible_skills=fake_list_skills),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.agent_repository",
+        "openzetc.repositories.agent_repository",
         types.SimpleNamespace(AgentRepository=FakeAgentRepository),
     )
     context = ChatBotContext(
@@ -348,22 +348,22 @@ async def test_prepare_agent_runtime_context_clears_resources_for_missing_user(m
 
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.backends.knowledge_base_backend",
+        "openzetc.agents.backends.knowledge_base_backend",
         types.SimpleNamespace(resolve_visible_knowledge_bases_for_context=lambda _context: None),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.agents.middlewares.skills",
+        "openzetc.agents.middlewares.skills",
         types.SimpleNamespace(resolve_runtime_skills_for_context=lambda _context, db=None, user=None: None),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.user_repository",
+        "openzetc.repositories.user_repository",
         types.SimpleNamespace(UserRepository=FakeUserRepository),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.storage.postgres.manager",
+        "openzetc.storage.postgres.manager",
         types.SimpleNamespace(pg_manager=types.SimpleNamespace(get_async_session_context=lambda: FakeSessionContext())),
     )
 

@@ -1,0 +1,21 @@
+from dotenv import load_dotenv
+
+load_dotenv(".env", override=True)
+
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+
+from openzetc.config import config as config  # noqa: E402
+
+try:
+    from importlib.metadata import version
+
+    __version__ = version("openzetc")
+except Exception:
+    __version__ = "unknown"
+
+executor = ThreadPoolExecutor()  # noqa: E402
+
+
+def get_version():
+    """Return the openZetc version."""
+    return __version__

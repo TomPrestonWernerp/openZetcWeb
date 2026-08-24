@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from server.routers.mcp_router import mcp
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
-from yuxi.storage.postgres.models_business import User
+from openzetc.storage.postgres.models_business import User
 
 
 def _build_app(*, allow_admin: bool = True) -> FastAPI:

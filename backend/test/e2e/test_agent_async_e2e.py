@@ -18,7 +18,7 @@ EXPECTED_OUTPUT = "ASYNC_AGENT_E2E_OK"
 
 
 def _postgres_dsn() -> str:
-    return os.getenv("POSTGRES_URL", "postgresql+asyncpg://postgres:postgres@postgres:5432/yuxi").replace(
+    return os.getenv("POSTGRES_URL", "postgresql+asyncpg://postgres:postgres@postgres:5432/openzetc").replace(
         "+asyncpg", ""
     )
 
