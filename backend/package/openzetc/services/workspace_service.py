@@ -127,6 +127,23 @@ def _resolve_new_child(root: Path, parent: Path, name: str) -> Path:
     return target
 
 
+def _normalize_upload_relative_path(path: str | None, *, fallback_name: str) -> PurePosixPath:
+    raw_path = str(path or fallback_name).strip().replace("\\", "/")
+    parts = raw_path.split("/")
+    if not raw_path or raw_path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+        raise HTTPException(status_code=422, detail="上传文件相对路径不合法")
+    return PurePosixPath(*(_validate_child_name(part, field_name="上传文件相对路径") for part in parts))
+
+
+def _resolve_upload_target(root: Path, parent: Path, relative_path: PurePosixPath) -> Path:
+    target = parent.joinpath(*relative_path.parts)
+    try:
+        target.resolve(strict=False).relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Access denied") from exc
+    return target
+
+
 def _list_directory(root: Path, target: Path, *, recursive: bool = False, files_only: bool = False) -> list[dict]:
     children = list(target.iterdir())
     entries = [_entry_for_path(root, child) for child in children if not files_only or child.is_file()]
@@ -303,34 +320,72 @@ async def _write_workspace_upload(file: UploadFile, target: Path) -> None:
                 await asyncio.to_thread(target.unlink)
 
 
-async def upload_workspace_files(*, parent_path: str, files: list[UploadFile], current_user: User) -> dict:
+async def upload_workspace_files(
+    *,
+    parent_path: str,
+    files: list[UploadFile],
+    current_user: User,
+    relative_paths: list[str] | None = None,
+) -> dict:
     if not files:
         raise HTTPException(status_code=400, detail="请选择至少一个文件")
     if len(files) > MAX_WORKSPACE_UPLOAD_FILES:
         raise HTTPException(status_code=400, detail=f"一次最多上传 {MAX_WORKSPACE_UPLOAD_FILES} 个文件")
+    if relative_paths is not None and len(relative_paths) != len(files):
+        raise HTTPException(status_code=422, detail="文件与相对路径数量不一致")
 
     root = _workspace_root(current_user)
     parent = _resolve_parent_directory(current_user, parent_path)
-    seen_names = set()
+    seen_paths: set[str] = set()
     upload_targets: list[tuple[UploadFile, Path]] = []
 
-    for file in files:
+    for index, file in enumerate(files):
         file_name = _validate_child_name(Path(file.filename or "").name, field_name="文件名")
-        if file_name in seen_names:
-            raise HTTPException(status_code=400, detail=f"选择的文件中存在重复文件名: {file_name}")
-        seen_names.add(file_name)
-        upload_targets.append((file, _resolve_new_child(root, parent, file_name)))
+        relative_path = _normalize_upload_relative_path(
+            relative_paths[index] if relative_paths is not None else None,
+            fallback_name=file_name,
+        )
+        normalized_key = relative_path.as_posix().casefold()
+        if normalized_key in seen_paths:
+            raise HTTPException(status_code=400, detail=f"选择的文件中存在重复路径: {relative_path.as_posix()}")
+        seen_paths.add(normalized_key)
+        upload_targets.append((file, _resolve_upload_target(root, parent, relative_path)))
+
+    target_paths = {target for _file, target in upload_targets}
+    for _file, target in upload_targets:
+        if target.exists():
+            raise HTTPException(status_code=400, detail=f"同名文件或文件夹已存在: {target.name}")
+        ancestor = target.parent
+        while ancestor != parent:
+            if ancestor in target_paths or (ancestor.exists() and not ancestor.is_dir()):
+                relative_target = target.relative_to(parent).as_posix()
+                raise HTTPException(status_code=400, detail=f"上传路径与文件冲突: {relative_target}")
+            ancestor = ancestor.parent
 
     completed_targets: list[Path] = []
+    created_directories: list[Path] = []
     try:
         for file, target in upload_targets:
+            missing_directories = []
+            ancestor = target.parent
+            while ancestor != parent and not ancestor.exists():
+                missing_directories.append(ancestor)
+                ancestor = ancestor.parent
+            for directory in reversed(missing_directories):
+                await asyncio.to_thread(directory.mkdir)
+                created_directories.append(directory)
             await _write_workspace_upload(file, target)
             completed_targets.append(target)
-    except HTTPException:
+    except (HTTPException, OSError) as exc:
         for target in completed_targets:
             with contextlib.suppress(OSError):
                 await asyncio.to_thread(target.unlink)
-        raise
+        for directory in reversed(created_directories):
+            with contextlib.suppress(OSError):
+                await asyncio.to_thread(directory.rmdir)
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=400, detail=f"上传文件失败: {exc}") from exc
 
     await invalidate_workspace_mention_cache(str(current_user.uid))
     return {"success": True, "entries": [_entry_for_path(root, target) for _file, target in upload_targets]}

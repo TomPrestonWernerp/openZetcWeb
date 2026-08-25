@@ -16,6 +16,7 @@ from openzetc.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, Milv
 from openzetc.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
 from openzetc.knowledge.runtime import knowledge_base
 from openzetc.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
+from openzetc.knowledge.utils.kb_utils import normalize_source_path
 from openzetc.knowledge.utils.mindmap_utils import (
     batch_remove_files_from_mindmap,
     generate_database_mindmap,
@@ -1928,6 +1929,9 @@ async def import_workspace_files(
         target = resolve_workspace_file_path(path=workspace_path, current_user=current_user)
 
         filename = target.name
+        source_path = normalize_source_path(str(workspace_path).lstrip("/"))
+        if not source_path:
+            raise HTTPException(status_code=400, detail=f"工作区文件路径不合法: {workspace_path}")
         ext = os.path.splitext(filename)[1].lower()
         if not is_supported_file_extension(filename):
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
@@ -1943,13 +1947,13 @@ async def import_workspace_files(
         if file_exists:
             raise HTTPException(status_code=409, detail=f"数据库中已经存在了相同内容文件: {filename}")
 
-        basename, ext = os.path.splitext(filename)
+        basename, ext = os.path.splitext(source_path)
         timestamp = int(time.time() * 1000)
         minio_filename = f"{basename}_{timestamp}{ext}"
         object_name = f"{kb_id}/upload/{minio_filename}"
         minio_url = await aupload_file_to_minio(bucket_name, object_name, file_bytes)
 
-        normalized_filename = filename.lower()
+        normalized_filename = source_path.lower()
         same_name_files = await knowledge_base.get_same_name_files(kb_id, normalized_filename)
         results.append(
             {
@@ -1965,6 +1969,7 @@ async def import_workspace_files(
                 "object_name": object_name,
                 "bucket_name": bucket_name,
                 "workspace_path": workspace_path,
+                "source_path": source_path,
                 "same_name_files": same_name_files,
                 "has_same_name": len(same_name_files) > 0,
             }
@@ -1990,12 +1995,16 @@ async def upload_file(
 
     logger.debug(f"Received upload file with filename: {file.filename}")
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    source_path = normalize_source_path(file.filename)
+    if not source_path:
+        raise HTTPException(status_code=400, detail="Invalid upload file path")
 
-    if not is_supported_file_extension(file.filename):
+    ext = os.path.splitext(source_path)[1].lower()
+
+    if not is_supported_file_extension(source_path):
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
-    basename, ext = os.path.splitext(file.filename)
+    basename, ext = os.path.splitext(source_path)
     # 直接使用原始文件名（小写）
     filename = f"{basename}{ext}".lower()
 
@@ -2044,6 +2053,7 @@ async def upload_file(
         "minio_filename": minio_filename,  # MinIO中的文件名（带时间戳）
         "object_name": object_name,
         "bucket_name": bucket_name,  # MinIO存储桶名称
+        "source_path": source_path,
         "same_name_files": same_name_files,  # 同名文件列表
         "has_same_name": has_same_name,  # 是否包含同名文件标志
     }

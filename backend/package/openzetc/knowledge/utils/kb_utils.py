@@ -117,7 +117,7 @@ async def prepare_item_metadata(item: str, content_type: str, kb_id: str, params
         timestamp_pattern = r"^(.+)_(\d{13})(\.[^.]+)$"
         match = re.match(timestamp_pattern, filename)
         filename_display = match.group(1) + match.group(3) if match else filename
-        source_path = _normalize_source_path(params.get("source_path")) if params else None
+        source_path = normalize_source_path(params.get("source_path")) if params else None
         if source_path:
             filename_display = source_path
 
@@ -160,12 +160,12 @@ async def prepare_item_metadata(item: str, content_type: str, kb_id: str, params
     return metadata
 
 
-def _normalize_source_path(value: object) -> str | None:
-    """归一化客户端传入的上传源路径，仅用于知识库文件树中的展示文件名。
+def normalize_source_path(value: object) -> str | None:
+    """归一化客户端传入的上传源相对路径。
 
-    source_path 用来保留 CLI 目录上传时的相对层级。这里不会把它当作真实
-    存储路径使用：反斜杠会转成斜杠，开头的 "./" 会被去掉，绝对路径和
-    ".." 父目录跳转会被拒绝。
+    归一化后的路径可同时用于对象存储键和知识库文件树中的来源路径：
+    反斜杠会转成斜杠，开头的 "./" 会被去掉，绝对路径和 ".." 父目录
+    跳转会被拒绝。
     """
     if not isinstance(value, str):
         return None

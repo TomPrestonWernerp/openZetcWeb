@@ -21,6 +21,13 @@
         >
           上传文件
         </a-button>
+        <a-button
+          :loading="uploadingFile"
+          :disabled="activeSourceKey !== 'personal'"
+          @click="openUploadDirectoryPicker"
+        >
+          上传文件夹
+        </a-button>
       </template>
     </PageHeader>
 
@@ -29,6 +36,15 @@
       class="upload-input"
       type="file"
       multiple
+      @change="handleUploadInputChange"
+    />
+    <input
+      ref="uploadDirectoryInputRef"
+      class="upload-input"
+      type="file"
+      multiple
+      webkitdirectory
+      directory
       @change="handleUploadInputChange"
     />
 
@@ -246,6 +262,7 @@ const newDirectoryName = ref('')
 const creatingDirectory = ref(false)
 const uploadingFile = ref(false)
 const uploadInputRef = ref(null)
+const uploadDirectoryInputRef = ref(null)
 const deletingPaths = ref([])
 const sidebarCollapsed = ref(false)
 const previewWidthPercent = ref(50)
@@ -708,6 +725,14 @@ const openUploadFilePicker = () => {
   if (uploadInputRef.value) {
     uploadInputRef.value.value = ''
     uploadInputRef.value.click()
+  }
+}
+
+const openUploadDirectoryPicker = () => {
+  if (activeSourceKey.value !== 'personal' || uploadingFile.value) return
+  if (uploadDirectoryInputRef.value) {
+    uploadDirectoryInputRef.value.value = ''
+    uploadDirectoryInputRef.value.click()
   }
 }
 

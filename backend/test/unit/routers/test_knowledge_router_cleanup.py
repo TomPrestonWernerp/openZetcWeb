@@ -244,6 +244,104 @@ async def test_upload_file_read_only_kb_fails_before_read_or_minio(monkeypatch):
     assert calls == {"read": 0, "upload": 0}
 
 
+async def test_upload_file_preserves_folder_path_in_object_storage(monkeypatch):
+    captured = {}
+
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "kb_1"}
+
+    async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
+        return None
+
+    async def fake_upload_to_minio(bucket_name: str, object_name: str, data: bytes) -> str:
+        captured.update(bucket_name=bucket_name, object_name=object_name, data=data)
+        return f"minio://{bucket_name}/{object_name}"
+
+    async def fake_file_existed(_kb_id: str, _content_hash: str) -> bool:
+        return False
+
+    async def fake_same_name_files(_kb_id: str, _filename: str) -> list:
+        return []
+
+    monkeypatch.setattr(
+        knowledge_router,
+        "_ensure_database_supports_documents",
+        fake_ensure_database_supports_documents,
+    )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
+    monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "file_existed_in_db", fake_file_existed)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_same_name_files", fake_same_name_files)
+    monkeypatch.setattr(knowledge_router.time, "time", lambda: 1700000000)
+
+    upload = UploadFile(filename="政策法规/国家/law.txt", file=BytesIO(b"law"))
+    result = await knowledge_router.upload_file(
+        upload,
+        kb_id="kb_1",
+        current_user=SimpleNamespace(uid="user_1"),
+        db=None,
+    )
+
+    assert result["source_path"] == "政策法规/国家/law.txt"
+    assert result["object_name"] == "kb_1/upload/政策法规/国家/law_1700000000000.txt"
+    assert captured["object_name"] == result["object_name"]
+    assert captured["data"] == b"law"
+
+
+async def test_import_workspace_file_preserves_folder_path_in_object_storage(monkeypatch, tmp_path):
+    captured = {}
+    workspace_file = tmp_path / "law.txt"
+    workspace_file.write_bytes(b"workspace-law")
+
+    async def fake_ensure_manage(*_args, **_kwargs):
+        return {"kb_id": "kb_1"}
+
+    async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
+        return None
+
+    async def fake_upload_to_minio(bucket_name: str, object_name: str, data: bytes) -> str:
+        captured.update(bucket_name=bucket_name, object_name=object_name, data=data)
+        return f"minio://{bucket_name}/{object_name}"
+
+    async def fake_file_existed(_kb_id: str, _content_hash: str) -> bool:
+        return False
+
+    async def fake_same_name_files(_kb_id: str, _filename: str) -> list:
+        return []
+
+    monkeypatch.setattr(
+        knowledge_router,
+        "_ensure_database_supports_documents",
+        fake_ensure_database_supports_documents,
+    )
+    monkeypatch.setattr(knowledge_router, "ensure_knowledge_manage", fake_ensure_manage)
+    monkeypatch.setattr(knowledge_router, "resolve_workspace_file_path", lambda **_kwargs: workspace_file)
+    monkeypatch.setattr(
+        knowledge_router,
+        "get_minio_client",
+        lambda: SimpleNamespace(KB_BUCKETS={"documents": "knowledgebases"}),
+    )
+    monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "file_existed_in_db", fake_file_existed)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_same_name_files", fake_same_name_files)
+    monkeypatch.setattr(knowledge_router.time, "time", lambda: 1700000000)
+
+    result = await knowledge_router.import_workspace_files(
+        knowledge_router.WorkspaceImportRequest(
+            kb_id="kb_1",
+            paths=["/国家标准/政策法规/law.txt"],
+        ),
+        current_user=SimpleNamespace(uid="user_1"),
+        db=None,
+    )
+
+    item = result["items"][0]
+    assert item["source_path"] == "国家标准/政策法规/law.txt"
+    assert item["object_name"] == "kb_1/upload/国家标准/政策法规/law_1700000000000.txt"
+    assert captured["object_name"] == item["object_name"]
+    assert captured["data"] == b"workspace-law"
+
+
 async def test_markdown_endpoint_rejects_oversized_file(monkeypatch):
     monkeypatch.setattr(knowledge_router, "MAX_UPLOAD_SIZE_BYTES", 5)
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"123456"))

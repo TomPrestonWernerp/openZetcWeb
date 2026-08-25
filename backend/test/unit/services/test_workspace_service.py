@@ -317,6 +317,98 @@ async def test_upload_workspace_files_writes_files(tmp_path: Path, monkeypatch) 
 
 
 @pytest.mark.asyncio
+async def test_upload_workspace_files_preserves_relative_directory_structure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(workspace_paths.conf, "save_dir", str(tmp_path))
+    user = _user()
+    root = svc._workspace_root(user)
+    uploads = [
+        UploadFile(filename="law.txt", file=BytesIO(b"law")),
+        UploadFile(filename="guide.md", file=BytesIO(b"guide")),
+    ]
+
+    result = await svc.upload_workspace_files(
+        parent_path="/",
+        files=uploads,
+        relative_paths=["国家标准/政策法规/law.txt", "国家标准/技术指南/guide.md"],
+        current_user=user,
+    )
+
+    assert [entry["path"] for entry in result["entries"]] == [
+        "/国家标准/政策法规/law.txt",
+        "/国家标准/技术指南/guide.md",
+    ]
+    assert (root / "国家标准" / "政策法规" / "law.txt").read_bytes() == b"law"
+    assert (root / "国家标准" / "技术指南" / "guide.md").read_bytes() == b"guide"
+
+
+@pytest.mark.asyncio
+async def test_upload_workspace_files_rejects_relative_path_traversal(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(workspace_paths.conf, "save_dir", str(tmp_path))
+    user = _user()
+    root = svc._workspace_root(user)
+    uploads = [UploadFile(filename="outside.txt", file=BytesIO(b"outside"))]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await svc.upload_workspace_files(
+            parent_path="/",
+            files=uploads,
+            relative_paths=["../outside.txt"],
+            current_user=user,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert not (root.parent / "outside.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_upload_workspace_files_cleans_created_directories_after_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(workspace_paths.conf, "save_dir", str(tmp_path))
+    monkeypatch.setattr(svc, "MAX_WORKSPACE_UPLOAD_SIZE_BYTES", 5)
+    user = _user()
+    root = svc._workspace_root(user)
+    uploads = [
+        UploadFile(filename="small.txt", file=BytesIO(b"12345")),
+        UploadFile(filename="large.txt", file=BytesIO(b"123456")),
+    ]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await svc.upload_workspace_files(
+            parent_path="/",
+            files=uploads,
+            relative_paths=["资料/第一批/small.txt", "资料/第二批/large.txt"],
+            current_user=user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert not (root / "资料").exists()
+
+
+@pytest.mark.asyncio
+async def test_upload_workspace_files_rejects_mismatched_relative_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(workspace_paths.conf, "save_dir", str(tmp_path))
+    uploads = [
+        UploadFile(filename="first.txt", file=BytesIO(b"first")),
+        UploadFile(filename="second.txt", file=BytesIO(b"second")),
+    ]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await svc.upload_workspace_files(
+            parent_path="/",
+            files=uploads,
+            relative_paths=["first.txt"],
+            current_user=_user(),
+        )
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_upload_workspace_files_rejects_oversized_file_and_cleans_partial_files(
     tmp_path: Path,
     monkeypatch,

@@ -1458,12 +1458,14 @@ const chunkData = async () => {
       const items = []
       const content_hashes = {}
       const file_sizes = {}
+      const source_paths = {}
       for (const item of importedItems) {
         const filePath = item.file_path
         if (!filePath) continue
         items.push(filePath)
         if (item.content_hash) content_hashes[filePath] = item.content_hash
         if (Number.isFinite(item.size)) file_sizes[filePath] = item.size
+        if (item.source_path) source_paths[filePath] = item.source_path
         mergeSameNameFiles(item.same_name_files)
 
         const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
@@ -1476,7 +1478,7 @@ const chunkData = async () => {
         }
       }
 
-      const params = { ...processingParams.value, content_hashes, file_sizes }
+      const params = { ...processingParams.value, content_hashes, file_sizes, source_paths }
       if (autoIndex.value) {
         params.auto_index = true
         Object.assign(params, buildAutoIndexParams())
@@ -1587,6 +1589,7 @@ const chunkData = async () => {
   const items = []
   const content_hashes = {}
   const file_sizes = {}
+  const source_paths = {}
   for (const file of fileList.value) {
     if (file.status !== 'done') continue
     const file_path = file.response?.file_path
@@ -1596,6 +1599,7 @@ const chunkData = async () => {
     items.push(file_path)
     if (content_hash) content_hashes[file_path] = content_hash
     if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
+    if (file.response?.source_path) source_paths[file_path] = file.response.source_path
 
     // 检查是否需要OCR
     const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
@@ -1615,7 +1619,7 @@ const chunkData = async () => {
 
   try {
     store.state.chunkLoading = true
-    const params = { ...processingParams.value, content_hashes, file_sizes }
+    const params = { ...processingParams.value, content_hashes, file_sizes, source_paths }
     if (autoIndex.value) {
       params.auto_index = true
       Object.assign(params, buildAutoIndexParams())

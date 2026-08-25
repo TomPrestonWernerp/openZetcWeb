@@ -247,9 +247,15 @@ async def create_workspace_directory_route(
 async def upload_workspace_files_route(
     parent_path: str = Form(..., description="父目录路径"),
     files: list[UploadFile] = File(..., description="上传文件列表"),
+    relative_paths: list[str] | None = Form(None, description="文件相对目录路径列表"),
     current_user: User = Depends(get_required_user),
 ):
-    return await upload_workspace_files(parent_path=parent_path, files=files, current_user=current_user)
+    return await upload_workspace_files(
+        parent_path=parent_path,
+        files=files,
+        relative_paths=relative_paths,
+        current_user=current_user,
+    )
 
 
 @workspace.get("/download")
