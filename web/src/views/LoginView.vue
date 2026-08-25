@@ -276,7 +276,6 @@ import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
-import { useAgentStore } from '@/stores/agent'
 import { message } from 'ant-design-vue'
 import { healthApi } from '@/apis/system_api'
 import { authApi } from '@/apis/auth_api'
@@ -293,7 +292,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const agentStore = useAgentStore()
 
 // 品牌展示数据
 const loginBgImage = computed(() => {
@@ -457,16 +455,9 @@ const handleLogin = async () => {
     const redirectPath = sessionStorage.getItem('redirect') || '/'
     sessionStorage.removeItem('redirect') // 清除重定向信息
 
-    // 根据用户角色决定重定向目标
+    // 未指定目标时进入精简版的知识库首页
     if (redirectPath === '/') {
-      // 统一跳转到聊天页面（管理员与普通用户共享同一聊天界面）
-      try {
-        await agentStore.initialize()
-        router.push('/agent')
-      } catch (error) {
-        console.error('获取智能体信息失败:', error)
-        router.push('/agent')
-      }
+      router.push('/extensions')
     } else {
       // 跳转到其他预设的路径
       router.push(redirectPath)
@@ -579,7 +570,7 @@ const handleInitialize = async () => {
     })
 
     message.success('管理员账户创建成功')
-    router.push('/')
+    router.push('/extensions')
   } catch (error) {
     console.error('初始化失败:', error)
     errorMessage.value = error.message || '初始化失败，请重试'
@@ -626,7 +617,8 @@ const checkServerHealth = async () => {
 onMounted(async () => {
   // 如果已登录，按 redirect 参数跳转（不固定跳首页）
   if (userStore.isLoggedIn) {
-    router.push(sanitizeRedirect(route.query.redirect))
+    const redirectPath = sanitizeRedirect(route.query.redirect)
+    router.push(redirectPath === '/' ? '/extensions' : redirectPath)
     return
   }
 

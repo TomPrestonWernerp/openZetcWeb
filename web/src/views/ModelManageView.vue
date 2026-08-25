@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
-import AgentManagePanel from '@/components/model-management/AgentManagePanel.vue'
 import ModelProviderManagePanel from '@/components/model-management/ModelProviderManagePanel.vue'
 import { useUserStore } from '@/stores/user'
 
@@ -11,46 +10,21 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('agents')
-const agentPanelRef = ref(null)
+const activeTab = ref('providers')
 const providerPanelRef = ref(null)
 
-const modelManageTabs = computed(() => {
-  const tabs = [{ key: 'agents', label: '智能体' }]
-  if (userStore.isAdmin) tabs.push({ key: 'providers', label: '模型供应商' })
-  return tabs
-})
-
-const activePanel = computed(() =>
-  activeTab.value === 'providers' ? providerPanelRef.value : agentPanelRef.value
-)
-
-const activeLoading = computed(() => activePanel.value?.loading || false)
-const activeStats = computed(() => activePanel.value?.stats || {})
-
-const normalizeTab = (tab) => {
-  if (tab === 'providers' && userStore.isAdmin) return 'providers'
-  return 'agents'
-}
+const modelManageTabs = [{ key: 'providers', label: '模型供应商' }]
+const activeLoading = computed(() => providerPanelRef.value?.loading || false)
+const activeStats = computed(() => providerPanelRef.value?.stats || {})
 
 watch(
-  () => [route.query.tab, userStore.isAdmin],
-  ([tab]) => {
-    const nextTab = normalizeTab(tab)
-    if (activeTab.value !== nextTab) activeTab.value = nextTab
+  () => route.query.tab,
+  (tab) => {
+    if (tab === 'providers') return
+    router.replace({ query: { ...route.query, tab: 'providers' } })
   },
   { immediate: true }
 )
-
-watch(activeTab, (tab) => {
-  const nextTab = normalizeTab(tab)
-  if (nextTab !== tab) {
-    activeTab.value = nextTab
-    return
-  }
-  if (route.query.tab === nextTab) return
-  router.replace({ query: { ...route.query, tab: nextTab } })
-})
 </script>
 
 <template>
@@ -64,13 +38,7 @@ watch(activeTab, (tab) => {
       aria-label="智能体管理视图切换"
     >
       <template #info>
-        <div v-if="activeTab === 'agents'" class="summary-strip">
-          <span>{{ activeStats.total || 0 }} 个智能体</span>
-          <span>{{ activeStats.global || 0 }} 个全局</span>
-          <span v-if="activeStats.builtin">{{ activeStats.builtin }} 个内置</span>
-          <span>{{ activeStats.manageable || 0 }} 个可管理</span>
-        </div>
-        <div v-else class="summary-strip">
+        <div class="summary-strip">
           <span>{{ activeStats.total || 0 }} 个供应商</span>
           <span>{{ activeStats.enabled || 0 }} 个启用</span>
           <span v-if="activeStats.warning > 0" class="warning-count">
@@ -82,10 +50,7 @@ watch(activeTab, (tab) => {
     </PageHeader>
 
     <div class="model-manage-content">
-      <div v-show="activeTab === 'agents'" class="tab-panel">
-        <AgentManagePanel ref="agentPanelRef" />
-      </div>
-      <div v-if="userStore.isAdmin && activeTab === 'providers'" class="tab-panel">
+      <div v-if="userStore.isAdmin" class="tab-panel">
         <ModelProviderManagePanel ref="providerPanelRef" />
       </div>
     </div>

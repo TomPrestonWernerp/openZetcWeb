@@ -14,15 +14,6 @@
       <div v-if="activeTab === 'knowledge'" class="tab-panel">
         <DataBaseView ref="knowledgeRef" embedded />
       </div>
-      <div v-if="activeTab === 'tools'" class="tab-panel">
-        <ToolsCardList ref="toolsRef" />
-      </div>
-      <div v-if="activeTab === 'skills'" class="tab-panel">
-        <SkillCardList ref="skillsRef" />
-      </div>
-      <div v-if="activeTab === 'mcp'" class="tab-panel">
-        <McpCardList ref="mcpRef" />
-      </div>
     </div>
 
     <router-view v-else />
@@ -32,9 +23,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ToolsCardList from '@/components/extensions/ToolsCardList.vue'
-import McpCardList from '@/components/extensions/McpCardList.vue'
-import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
 
@@ -42,16 +30,8 @@ const route = useRoute()
 const router = useRouter()
 const activeTab = ref(null)
 const knowledgeRef = ref(null)
-const skillsRef = ref(null)
-const mcpRef = ref(null)
-const toolsRef = ref(null)
 
-const extensionTabs = [
-  { key: 'knowledge', label: '知识库' },
-  { key: 'tools', label: '工具' },
-  { key: 'mcp', label: 'MCP' },
-  { key: 'skills', label: 'Skills' }
-]
+const extensionTabs = [{ key: 'knowledge', label: '知识库' }]
 const allowedTabKeys = computed(() => extensionTabs.map((tab) => tab.key))
 const defaultTabKey = computed(() => extensionTabs[0]?.key || 'skills')
 
@@ -79,14 +59,7 @@ const isDetailPage = computed(() => {
 })
 
 const activeChildLoading = computed(() => {
-  const refMap = {
-    knowledge: knowledgeRef,
-    tools: toolsRef,
-    skills: skillsRef,
-    mcp: mcpRef
-  }
-  const child = refMap[activeTab.value]
-  return child?.value?.loading || false
+  return knowledgeRef.value?.loading || false
 })
 
 watch(

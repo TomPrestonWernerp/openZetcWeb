@@ -364,7 +364,7 @@ const goToChat = async () => {
     return
   }
 
-  router.push('/agent')
+  router.push('/extensions')
 }
 
 const loadDesktopRelease = async () => {
