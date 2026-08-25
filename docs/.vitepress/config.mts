@@ -61,6 +61,7 @@ export default defineConfig({
           { text: '品牌自定义', link: '/advanced/branding' },
           { text: '其他配置', link: '/advanced/misc' },
           { text: '生产部署', link: '/advanced/deployment' },
+          { text: 'Linux 部署与 Web 更新', link: '/advanced/linux-deployment-0.7.100' },
           { text: 'API Key 外部集成', link: '/advanced/api-key-integration' }
         ]
       },
