@@ -14,6 +14,19 @@
       class="migration-alert"
     />
 
+    <a-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      message="数据库配置读取失败"
+      :description="loadError"
+      class="migration-alert"
+    >
+      <template #action>
+        <a-button size="small" @click="loadConfig()">重新加载</a-button>
+      </template>
+    </a-alert>
+
     <a-spin :spinning="loading">
       <div class="config-list">
         <section v-for="section in sections" :key="section.key" class="config-card">
@@ -73,6 +86,15 @@
               </a-button>
             </a-space>
           </div>
+
+          <a-alert
+            v-if="selectedSource(section.key)?.requires_secret_reentry"
+            type="error"
+            show-icon
+            message="该配置来源的敏感字段无法解密"
+            :description="secretRecoveryMessage(section.key)"
+            class="source-recovery-alert"
+          />
 
           <div class="form-grid">
             <div class="form-item wide-field">
@@ -179,6 +201,7 @@ import { Database, Eye, EyeOff, HardDrive, Network, PlugZap, Save } from 'lucide
 import { infrastructureConfigApi } from '@/apis/system_api'
 
 const loading = ref(false)
+const loadError = ref('')
 const MASKED_SECRET = '********'
 const SYSTEM_DEFAULT_SECRET = '__OPENZETC_SYSTEM_DEFAULT_SECRET__'
 const saving = reactive({})
@@ -397,7 +420,22 @@ function loadSelectedSource(sectionKey) {
   if (!source) return
   configNames[sectionKey] = source.config_name
   applyLoadedSection(sectionKey, source.values)
-  delete status[sectionKey]
+  if (source.requires_secret_reentry) {
+    status[sectionKey] = { color: 'error', text: '需要重新填写密钥' }
+  } else {
+    delete status[sectionKey]
+  }
+}
+
+function secretRecoveryMessage(sectionKey) {
+  const source = selectedSource(sectionKey)
+  const labels = (source?.unreadable_secret_fields || []).map((fieldKey) => {
+    const field = sections
+      .find((section) => section.key === sectionKey)
+      ?.fields.find((item) => item.key === fieldKey)
+    return fieldLabel(sectionKey, field || { key: fieldKey, label: fieldKey })
+  })
+  return `数据库已加载，但 ${labels.join('、') || '敏感字段'} 由其他部署密钥加密。请重新填写后保存；修复前不能激活该来源。`
 }
 
 function createSource(sectionKey) {
@@ -531,6 +569,7 @@ function fieldLabel(sectionKey, field) {
 
 async function loadConfig(preferredIds = {}) {
   loading.value = true
+  loadError.value = ''
   try {
     const data = await infrastructureConfigApi.getConfig()
     Object.assign(localDefaults, data._local_defaults || {})
@@ -549,7 +588,8 @@ async function loadConfig(preferredIds = {}) {
       }
     }
   } catch (error) {
-    message.error(error.message || '基础设施配置加载失败')
+    loadError.value = error.message || '基础设施配置加载失败'
+    message.error(loadError.value)
   } finally {
     loading.value = false
   }
@@ -666,6 +706,10 @@ onMounted(loadConfig)
 
   .migration-alert {
     margin-bottom: 12px;
+  }
+
+  .source-recovery-alert {
+    margin-bottom: 14px;
   }
 
   .secret-eye {

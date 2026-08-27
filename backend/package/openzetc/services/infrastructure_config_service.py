@@ -17,6 +17,7 @@ from openzetc.repositories.infrastructure_config_repository import Infrastructur
 from openzetc.storage.minio.client import MinIOClient
 from openzetc.storage.neo4j.manager import Neo4jConnectionManager
 from openzetc.storage.postgres.manager import pg_manager
+from openzetc.utils.logging_config import logger
 
 REVEALABLE_SECRET_FIELDS = {
     "object_storage": {"secret_key": "object_storage_secret_key"},
@@ -52,9 +53,7 @@ def _resolve_infrastructure_values(
 ) -> dict:
     """合并来源草稿；掩码保留原密钥，本机服务可回退到部署环境默认值。"""
     resolved = dict(base_values or config.resolve_infrastructure_config(section))
-    allowed_keys = {
-        field.removeprefix(f"{section}_") for field in INFRASTRUCTURE_CONFIG_FIELDS.get(section, ())
-    }
+    allowed_keys = {field.removeprefix(f"{section}_") for field in INFRASTRUCTURE_CONFIG_FIELDS.get(section, ())}
     for key, value in dict(values or {}).items():
         if key not in allowed_keys:
             raise ValueError(f"未知配置项: {key}")
@@ -74,13 +73,10 @@ def _resolve_infrastructure_values(
 def _get_cipher() -> Fernet:
     """使用部署级稳定密钥派生数据库配置加密密钥。"""
     key_material = (
-        os.getenv("INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY", "").strip()
-        or os.getenv("JWT_SECRET_KEY", "").strip()
+        os.getenv("INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY", "").strip() or os.getenv("JWT_SECRET_KEY", "").strip()
     )
     if not key_material:
-        raise RuntimeError(
-            "未配置 INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY 或 JWT_SECRET_KEY，无法安全保存基础设施密钥"
-        )
+        raise RuntimeError("未配置 INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY 或 JWT_SECRET_KEY，无法安全保存基础设施密钥")
     derived = hashlib.sha256(f"openzetc:infrastructure:{key_material}".encode()).digest()
     return Fernet(base64.urlsafe_b64encode(derived))
 
@@ -95,9 +91,27 @@ def _encrypt_database_values(section: str, values: dict) -> dict:
     return encrypted
 
 
-def _decrypt_database_values(section: str, values: dict) -> dict:
+class InfrastructureSecretDecryptionError(ValueError):
+    """数据库中的基础设施密钥无法由当前部署密钥解密。"""
+
+    def __init__(self, section: str, fields: list[str]):
+        self.section = section
+        self.fields = fields
+        super().__init__(
+            f"基础设施配置密钥无法解密: {section}.{', '.join(fields)}；"
+            "请同步原 INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY，或重新填写密钥后保存"
+        )
+
+
+def _decrypt_database_values_lenient(section: str, values: dict) -> tuple[dict, list[str]]:
+    """尽量读取数据库配置，并单独报告无法解密的敏感字段。
+
+    数据库从其他部署迁移后，加密密钥可能没有同步。配置列表仍应能返回，
+    让管理员看到来源及非敏感字段并通过重新录入密钥完成修复。
+    """
     decrypted = dict(values or {})
     cipher = None
+    unreadable_fields: list[str] = []
     for field in REVEALABLE_SECRET_FIELDS.get(section, {}):
         value = decrypted.get(field)
         if not isinstance(value, str) or not value.startswith(ENCRYPTED_VALUE_PREFIX):
@@ -105,8 +119,17 @@ def _decrypt_database_values(section: str, values: dict) -> dict:
         try:
             cipher = cipher or _get_cipher()
             decrypted[field] = cipher.decrypt(value.removeprefix(ENCRYPTED_VALUE_PREFIX).encode()).decode()
-        except InvalidToken as exc:
-            raise RuntimeError(f"基础设施配置密钥无法解密: {section}.{field}") from exc
+        except (InvalidToken, RuntimeError):
+            # 不能把旧密文或占位符回传给浏览器，也不能让一条坏记录拖垮整个列表。
+            decrypted[field] = ""
+            unreadable_fields.append(field)
+    return decrypted, unreadable_fields
+
+
+def _decrypt_database_values(section: str, values: dict) -> dict:
+    decrypted, unreadable_fields = _decrypt_database_values_lenient(section, values)
+    if unreadable_fields:
+        raise InfrastructureSecretDecryptionError(section, unreadable_fields)
     return decrypted
 
 
@@ -126,13 +149,15 @@ def _mask_secret_values(section: str, values: dict) -> dict:
 
 
 def _serialize_source(section: str, row) -> dict:
-    values = _decrypt_database_values(section, row.config_json)
+    values, unreadable_fields = _decrypt_database_values_lenient(section, row.config_json)
     return {
         "id": row.id,
         "config_name": row.config_name,
         "provider": row.provider,
         "is_active": bool(row.is_active),
         "values": _mask_secret_values(section, values),
+        "unreadable_secret_fields": unreadable_fields,
+        "requires_secret_reentry": bool(unreadable_fields),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -155,11 +180,13 @@ async def initialize_infrastructure_config() -> dict:
         for section in INFRASTRUCTURE_CONFIG_FIELDS:
             if await repository.count(section) == 0:
                 stored_values = legacy_configs.get(section)
-                values = (
-                    _decrypt_database_values(section, stored_values)
-                    if stored_values
-                    else config.resolve_infrastructure_config(section)
-                )
+                if stored_values:
+                    values, unreadable_fields = _decrypt_database_values_lenient(section, stored_values)
+                    if unreadable_fields:
+                        logger.error(f"跳过无法解密的旧基础设施配置迁移: section={section}, fields={unreadable_fields}")
+                        values = config.resolve_infrastructure_config(section)
+                else:
+                    values = config.resolve_infrastructure_config(section)
                 await repository.create(
                     section,
                     config_name=DEFAULT_SOURCE_NAMES[section],
@@ -172,10 +199,14 @@ async def initialize_infrastructure_config() -> dict:
             if active is None:
                 rows = await repository.list(section)
                 active = await repository.activate(section, rows[0].id)
-            config.update_infrastructure_config(
-                section,
-                _decrypt_database_values(section, active.config_json),
-            )
+            active_values, unreadable_fields = _decrypt_database_values_lenient(section, active.config_json)
+            if unreadable_fields:
+                logger.error(
+                    "激活的基础设施来源包含无法解密的密钥，保留当前运行时连接并等待管理员修复: "
+                    f"section={section}, source_id={active.id}, fields={unreadable_fields}"
+                )
+                continue
+            config.update_infrastructure_config(section, active_values)
 
         # 新表均已存在且至少有一个激活来源后，旧单表不再保留。
         await session.execute(text("DROP TABLE IF EXISTS infrastructure_configs"))
@@ -188,15 +219,33 @@ async def initialize_infrastructure_config() -> dict:
 
 async def get_infrastructure_config() -> dict:
     """返回三类激活配置以及每类全部已保存来源，敏感字段统一脱敏。"""
-    result: dict = {"_sources": {}, "_local_defaults": {"object_storage": _local_minio_defaults(masked=True)}}
+    result: dict = {
+        "_sources": {},
+        "_warnings": [],
+        "_local_defaults": {"object_storage": _local_minio_defaults(masked=True)},
+    }
     async with pg_manager.get_async_session_context() as session:
         repository = InfrastructureConfigRepository(session)
         for section in INFRASTRUCTURE_CONFIG_FIELDS:
             rows = await repository.list(section)
             active = next((row for row in rows if row.is_active), None)
             if active is not None:
-                active_values = _decrypt_database_values(section, active.config_json)
-                config.update_infrastructure_config(section, active_values)
+                active_values, unreadable_fields = _decrypt_database_values_lenient(section, active.config_json)
+                if unreadable_fields:
+                    result["_warnings"].append(
+                        {
+                            "code": "secret_decryption_failed",
+                            "section": section,
+                            "source_id": active.id,
+                            "config_name": active.config_name,
+                            "fields": unreadable_fields,
+                            "message": (
+                                "该来源的敏感字段由其他部署密钥加密，请同步原加密密钥，或重新填写敏感字段并保存"
+                            ),
+                        }
+                    )
+                else:
+                    config.update_infrastructure_config(section, active_values)
                 result[section] = _mask_secret_values(section, active_values)
             else:
                 result[section] = config.dump_infrastructure_config()[section]
@@ -230,7 +279,17 @@ async def save_infrastructure_source(
         if duplicate is not None and (row is None or duplicate.id != row.id):
             raise ValueError("同一类型下配置名称不能重复")
 
-        base_values = _decrypt_database_values(section, row.config_json) if row is not None else None
+        base_values = None
+        unreadable_fields: list[str] = []
+        if row is not None:
+            base_values, unreadable_fields = _decrypt_database_values_lenient(section, row.config_json)
+            missing_replacements = [
+                field
+                for field in unreadable_fields
+                if not str(values.get(field) or "").strip() or values.get(field) == "********"
+            ]
+            if missing_replacements:
+                raise InfrastructureSecretDecryptionError(section, missing_replacements)
         resolved = _resolve_infrastructure_values(section, values, base_values=base_values)
         _validate(section, resolved)
         encrypted = _encrypt_database_values(section, resolved)
@@ -322,9 +381,7 @@ async def reveal_infrastructure_secret(
     async with pg_manager.get_async_session_context() as session:
         repository = InfrastructureConfigRepository(session)
         row = (
-            await repository.get(section, source_id)
-            if source_id is not None
-            else await repository.get_active(section)
+            await repository.get(section, source_id) if source_id is not None else await repository.get_active(section)
         )
         if row is None:
             raise ValueError("配置尚未保存")
