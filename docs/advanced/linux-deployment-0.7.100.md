@@ -83,6 +83,31 @@ OPENZETC_CORS_ORIGINS=
 - 模型 API Key 可在首次登录后的“用户设置”中配置，不需要写入镜像。
 - 第三方对象存储、向量数据库和图数据库配置保存在 PostgreSQL；Docker 重启不会丢失，但 PostgreSQL 与相关数据卷仍必须纳入备份。
 
+### 从其他环境迁移 PostgreSQL 时的加密密钥
+
+对象存储的 `Secret Key`、托管向量库的 `Token` 和图数据库的 `Password` 在 PostgreSQL
+中以密文保存。迁移数据库时必须同时把源环境 `.env.prod` 中的
+`INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY` 安全复制到目标环境；不能在目标服务器重新生成。
+如果源环境没有显式配置该变量，旧数据实际使用源环境的 `JWT_SECRET_KEY` 加密；此时应把
+源环境的 `JWT_SECRET_KEY` 值写入目标环境的 `INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY`，
+不要因此替换目标环境正在使用的 JWT 密钥。
+
+如果数据库已经迁移但原密钥无法取得，新版本仍会加载三张配置表中的来源及非敏感字段，
+并在“基础设置 → 存储与数据库”中把对应来源标记为“需要重新填写密钥”。重新填写该来源的
+敏感字段并保存后，系统会用目标服务器当前的加密密钥重新加密；测试连接成功后再激活。
+在修复完成前，系统不会把无法解密的来源应用为运行时连接。
+
+可用以下命令确认 API 和 worker 实际拿到了同一个配置值（只输出哈希，不暴露原文）：
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec api \
+  python -c 'import hashlib,os; print(hashlib.sha256(os.environ["INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY"].encode()).hexdigest())'
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec worker \
+  python -c 'import hashlib,os; print(hashlib.sha256(os.environ["INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY"].encode()).hexdigest())'
+```
+
+两行哈希必须一致，并且容器重建后不能变化。
+
 验证 Compose 配置。后续所有生产命令都应显式携带 `--env-file .env.prod`，确保镜像标签和变量插值使用生产配置：
 
 ```bash
