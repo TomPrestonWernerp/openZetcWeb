@@ -51,8 +51,9 @@ COPY backend/uv.lock /app/uv.lock
 # 先复制 package 目录，因为 pyproject.toml 中 openzetc = { path = "package", editable = true }
 COPY backend/package /app/package
 
-# 如果网络还是不好，可以在后面添加 --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-RUN uv sync --no-cache --group test --no-dev --frozen
+# 保留 uv 下载缓存：即使大依赖下载中断，重试构建也无需从零开始。
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --group test --no-dev --frozen
 
 # 复制 server 代码
 COPY backend/server /app/server
