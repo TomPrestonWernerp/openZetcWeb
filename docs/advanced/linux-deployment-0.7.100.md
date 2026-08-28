@@ -46,6 +46,37 @@ git status --short --branch
 https://github.com/TomPrestonWernerp/openZetcWeb.git
 ```
 
+### 1.3 服务器无法访问 GitHub 时离线更新
+
+离线包必须同时包含当前分支代码、生产 Nginx 配置和证书。若 PostgreSQL 是从本地迁移到
+服务器，还必须安全携带本地用于加密基础设施配置的密钥；只迁移数据库无法解密对象存储
+`Secret Key`、向量数据库 `Token` 和图数据库 `Password`。
+
+在本地 Windows 项目目录执行（脚本不会显示密钥原文）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/export-infrastructure-key.ps1
+tar -czf openzetc-0.7.100-offline.tar.gz `
+  --exclude=.git --exclude=.env --exclude=.env.prod `
+  --exclude=node_modules --exclude=docker/volumes .
+```
+
+生成的 `.openzetc/infrastructure-key.env` 仅用于一次迁移，已经被 Git 忽略。将离线包上传
+到服务器后覆盖代码文件，但保留服务器原有的 `.env.prod` 和 `docker/volumes/`：
+
+```bash
+cd /opt/openzetc/openZetcWeb
+cp .env.prod ".env.prod.bak.$(date +%Y%m%d%H%M%S)"
+tar -xzf /上传目录/openzetc-0.7.100-offline.tar.gz
+bash scripts/deploy-prod.sh
+```
+
+部署脚本会在容器启动后直接读取对象存储、向量数据库和图数据库配置表，验证历史密文能否用当前 `INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY` 解密。任意密钥无法解密时部署会直接失败，且不会删除一次性迁移文件；只有三类配置全部校验通过后才会完成部署。
+
+部署脚本只把迁移密钥写入服务器现有 `.env.prod` 的
+`INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY`，不会覆盖服务器的 `JWT_SECRET_KEY`、数据库密码或
+其他已有配置；API、Worker 和 Web 验证成功后会删除一次性迁移文件。
+
 ## 2. 配置生产环境
 
 复制模板并限制权限：
@@ -108,6 +139,9 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec worker \
 
 两行哈希必须一致，并且容器重建后不能变化。
 
+生产 Compose 会把 `INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY` 作为启动必填项，缺失时会在
+创建容器前直接报错。这样可以避免服务表面启动成功、访问配置页面时才返回 500。
+
 验证 Compose 配置。后续所有生产命令都应显式携带 `--env-file .env.prod`，确保镜像标签和变量插值使用生产配置：
 
 ```bash
@@ -116,12 +150,22 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml config >/dev/null
 
 ## 3. 首次启动
 
-构建并启动核心服务：
+推荐使用部署脚本完成环境检查、Nginx/证书路径检查、构建、启动和 API/Worker 密钥一致性
+校验：
+
+```bash
+bash scripts/deploy-prod.sh
+```
+
+也可以手工构建并启动核心服务：
 
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml \
   up -d --build
 ```
+
+API 和 Worker 会等待 PostgreSQL、Redis、MinIO、Milvus、Neo4j 及沙箱服务健康后再启动，
+避免 Milvus Proxy 尚未就绪时出现 `service unavailable`。
 
 首次构建和拉取镜像耗时较长。查看状态和日志：
 

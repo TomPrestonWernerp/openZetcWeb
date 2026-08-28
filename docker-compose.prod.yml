@@ -5,6 +5,7 @@ x-api-worker-env: &api-worker-env
   OPENZETC_ENV: production
   PYTHONPATH: /app/package
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env.prod}
+  INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY: ${INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY:?Run scripts/prepare-prod-env.sh before starting production services}
   OPENZETC_INSTANCE_ID: ${OPENZETC_INSTANCE_ID:?Set OPENZETC_INSTANCE_ID in .env.prod}
   POSTGRES_URL: ${POSTGRES_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}@postgres:5432/${POSTGRES_DB:-openzetc}}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -65,6 +66,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      graph:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
       sandbox-provisioner:
         condition: service_healthy
 
@@ -94,6 +99,10 @@ services:
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      graph:
+        condition: service_healthy
+      milvus:
         condition: service_healthy
       sandbox-provisioner:
         condition: service_healthy
@@ -156,7 +165,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./docker/nginx/cert:/etc/nginx/cert:ro    
+      - ./docker/nginx/nginx/cert:/etc/nginx/cert:ro
     depends_on:
       - api
     networks:
@@ -174,7 +183,7 @@ services:
       - ./docker/volumes/neo4j/data:/data
       - ./docker/volumes/neo4j/logs:/var/lib/neo4j/logs
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7474 || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -241,6 +250,8 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.prod}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.prod}
       MILVUS_LOG_LEVEL: error
     volumes:
       - ./docker/volumes/milvus/milvus:/var/lib/milvus
