@@ -120,7 +120,17 @@ class MinIOClient:
         """确保存储桶存在"""
         try:
             created = False
-            if not self.client.bucket_exists(bucket_name=bucket_name):
+            try:
+                bucket_exists = self.client.bucket_exists(bucket_name=bucket_name)
+            except S3Error as e:
+                if e.code != "AccessDenied":
+                    raise
+                # 受限 S3 凭据可能具备对象读写权，但没有 ListAllMyBuckets/GetBucketLocation。
+                # 让真实 put_object 决定桶是否可写，避免在预检查阶段误报失败。
+                logger.warning(f"无权检查存储桶 '{bucket_name}'，将直接尝试对象操作")
+                return True
+
+            if not bucket_exists:
                 self.client.make_bucket(bucket_name=bucket_name)
                 created = True
                 logger.info(f"存储桶 '{bucket_name}' 已创建")
@@ -383,6 +393,9 @@ class MinIOClient:
             self.client.set_bucket_policy(bucket_name=bucket_name, policy=json.dumps(policy))
         except S3Error as e:
             logger.warning(f"设置存储桶 '{bucket_name}' 公共读取策略失败: {e}")
+            if e.code == "AccessDenied":
+                # 生产环境可由管理员预先配置桶策略；上传凭据无需拥有策略管理权限。
+                return
             raise StorageError(f"无法设置存储桶公共访问策略: {e}")
 
     @asynccontextmanager

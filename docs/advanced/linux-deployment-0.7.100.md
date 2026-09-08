@@ -111,6 +111,7 @@ OPENZETC_CORS_ORIGINS=
 - `.env.prod` 不得提交到 Git，也不要在工单、聊天或截图中暴露。
 - `JWT_SECRET_KEY`、`OPENZETC_INSTANCE_ID` 和 `INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY` 部署后应固定保存。
 - 已保存对象存储、向量数据库或图数据库配置后，不能直接更换 `INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY`，否则数据库内的密文将无法解密。
+- 内置容器 `minio` 与 `graph` 的账号密码以 `.env.prod` 为唯一运行时来源；数据库中曾保存的本机 MinIO/Neo4j 历史密码不会覆盖生产环境变量。外部托管来源仍使用各自保存的凭据。
 - 模型 API Key 可在首次登录后的“用户设置”中配置，不需要写入镜像。
 - 第三方对象存储、向量数据库和图数据库配置保存在 PostgreSQL；Docker 重启不会丢失，但 PostgreSQL 与相关数据卷仍必须纳入备份。
 
@@ -164,8 +165,9 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml \
   up -d --build
 ```
 
-API 和 Worker 会等待 PostgreSQL、Redis、MinIO、Milvus、Neo4j 及沙箱服务健康后再启动，
-避免 Milvus Proxy 尚未就绪时出现 `service unavailable`。
+API 和 Worker 会等待 PostgreSQL、Redis、MinIO、Milvus、Neo4j 及沙箱服务健康后再启动。
+PostgreSQL 与 Neo4j 健康检查会使用 `.env.prod` 执行真实鉴权，密码不一致时不会让 API/Worker
+带故障启动；Milvus 也会等待 Proxy 就绪，避免出现 `service unavailable`。
 
 首次构建和拉取镜像耗时较长。查看状态和日志：
 

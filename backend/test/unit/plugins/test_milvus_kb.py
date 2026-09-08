@@ -5,6 +5,7 @@ import types
 import pytest
 from pymilvus import CollectionSchema, DataType, FieldSchema, Function, FunctionType
 
+import openzetc.knowledge.implementations.milvus as milvus_module
 from openzetc.knowledge.base import FileStatus, KnowledgeBase
 from openzetc.knowledge.chunking.ragflow_like.nlp import count_tokens
 from openzetc.knowledge.implementations.milvus import (
@@ -90,6 +91,43 @@ def make_file_record(**overrides):
     }
     data.update(overrides)
     return types.SimpleNamespace(**data)
+
+
+@pytest.mark.asyncio
+async def test_initialize_collection_waits_until_milvus_reports_loaded(monkeypatch):
+    calls = []
+
+    class FakeCollectionForLoad:
+        name = "collection_1"
+
+        def load(self):
+            calls.append(("load", {}))
+
+    collection = FakeCollectionForLoad()
+
+    async def fake_run(func, /, *args, **kwargs):
+        if func == collection.load:
+            return func(*args, **kwargs)
+        calls.append(("wait", kwargs))
+        return None
+
+    kb = MilvusKB.__new__(MilvusKB)
+    kb.connection_alias = "milvus_test"
+    monkeypatch.setattr(milvus_module, "_run_milvus_query_io", fake_run)
+
+    await kb._initialize_kb_instance(collection)
+
+    assert calls == [
+        ("load", {}),
+        (
+            "wait",
+            {
+                "collection_name": "collection_1",
+                "using": "milvus_test",
+                "timeout": 120,
+            },
+        ),
+    ]
 
 
 class FakeKnowledgeFileRepository:

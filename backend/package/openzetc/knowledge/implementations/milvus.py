@@ -36,6 +36,7 @@ CONTENT_ANALYZER_PARAMS = {"type": "chinese"}
 VECTOR_METRIC_TYPE = "COSINE"
 MILVUS_CHUNK_EMBED_BATCH_SIZE = 200
 MILVUS_QUERY_OFFLOAD_LIMIT = 8
+MILVUS_COLLECTION_LOAD_TIMEOUT_SECONDS = 120
 _milvus_query_offload_semaphore_refs: dict[
     int,
     tuple[weakref.ReferenceType[asyncio.AbstractEventLoop], weakref.ReferenceType[asyncio.Semaphore]],
@@ -495,10 +496,17 @@ class MilvusKB(KnowledgeBase):
     async def _initialize_kb_instance(self, instance: Any) -> None:
         """初始化 Milvus 集合（加载到内存）"""
         try:
-            instance.load()
+            await _run_milvus_query_io(instance.load)
+            await _run_milvus_query_io(
+                utility.wait_for_loading_complete,
+                collection_name=instance.name,
+                using=self.connection_alias,
+                timeout=MILVUS_COLLECTION_LOAD_TIMEOUT_SECONDS,
+            )
             logger.info("Milvus collection loaded into memory")
         except Exception as e:
-            logger.warning(f"Failed to load collection into memory: {e}")
+            logger.error(f"Failed to load collection into memory: {e}")
+            raise
 
     def _get_embedding_function(self, embedding_model_spec: str, *, sync: bool = False):
         """获取 embedding 编码函数。sync=True 返回同步版本，否则返回异步版本。"""

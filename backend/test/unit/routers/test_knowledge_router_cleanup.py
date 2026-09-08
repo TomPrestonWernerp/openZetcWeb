@@ -644,6 +644,83 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
     assert context.result["items"] == [{"file_id": "file_1", "status": "indexed", "error": None}]
 
 
+async def test_add_documents_skips_duplicate_parse_and_still_indexes_parsed_file(monkeypatch):
+    context = FakeTaskContext()
+    item = "minio://knowledgebases/kb_1/upload/already-parsed.txt"
+    indexed = []
+
+    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
+        return {"file_id": "file_1", "status": "parsed"}
+
+    async def fail_if_parsed(*args, **kwargs):
+        raise AssertionError("parsed file must not be parsed again")
+
+    async def fake_index_file(kb_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None):
+        indexed.append(file_id)
+        return {"file_id": file_id, "status": "indexed"}
+
+    async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
+        await coroutine(context)
+        return SimpleNamespace(id="task_1")
+
+    async def fake_get_database_info(kb_id: str):
+        return {"name": "测试知识库"}
+
+    async def fake_update_file_params(*args, **kwargs):
+        return None
+
+    async def fake_ensure_database_supports_documents(*args):
+        return None
+
+    monkeypatch.setattr(
+        knowledge_router, "_ensure_database_supports_documents", fake_ensure_database_supports_documents
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fail_if_parsed)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
+    monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
+
+    result = await knowledge_router.add_documents(
+        "kb_1",
+        [item],
+        params={"content_type": "file", "auto_index": True, "content_hashes": {item: "hash_1"}},
+        current_user=SimpleNamespace(uid="uid-user"),
+    )
+
+    assert result["status"] == "queued"
+    assert indexed == ["file_1"]
+    assert context.result["items"] == [{"file_id": "file_1", "status": "indexed"}]
+
+
+async def test_run_parse_file_ids_skips_parsed_and_parsing_files(monkeypatch):
+    context = FakeTaskContext()
+    statuses = {"parsed": "parsed", "parsing": "parsing", "uploaded": "uploaded"}
+    parsed_calls = []
+
+    async def fake_get_file_basic_info(kb_id: str, file_id: str):
+        return {"file_id": file_id, "status": statuses[file_id]}
+
+    async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
+        parsed_calls.append(file_id)
+        return {"file_id": file_id, "status": "parsed"}
+
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_basic_info", fake_get_file_basic_info)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
+
+    result = await knowledge_router._run_parse_file_ids(
+        context=context,
+        kb_id="kb_1",
+        file_ids=["parsed", "parsing", "uploaded"],
+        operator_id="uid-user",
+    )
+
+    assert parsed_calls == ["uploaded"]
+    assert result["failed"] == 0
+    assert [item.get("skipped", False) for item in result["items"]] == [True, True, False]
+
+
 async def test_add_uploaded_documents_rejects_empty_items(monkeypatch):
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None

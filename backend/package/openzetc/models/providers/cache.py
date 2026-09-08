@@ -18,6 +18,26 @@ from openzetc.utils.logging_config import logger
 
 REDIS_CACHE_KEY = "openzetc:model_cache"
 _CACHE_TTL_SECONDS = 5
+DEFAULT_EMBEDDING_BATCH_SIZE = 40
+_PROVIDER_MODEL_BATCH_SIZE_LIMITS = {
+    ("alibaba", "text-embedding-v4"): 10,
+}
+
+
+def resolve_embedding_batch_size(
+    provider_id: str,
+    model_id: str,
+    model_type: str,
+    configured_batch_size: Any = None,
+) -> int:
+    """返回模型运行批次；旧配置缺失时应用供应商已知限制。"""
+    batch_size = (
+        max(1, int(configured_batch_size)) if configured_batch_size not in (None, "") else DEFAULT_EMBEDDING_BATCH_SIZE
+    )
+    if model_type != "embedding":
+        return batch_size
+    provider_limit = _PROVIDER_MODEL_BATCH_SIZE_LIMITS.get((provider_id, model_id))
+    return min(batch_size, provider_limit) if provider_limit else batch_size
 
 
 @dataclass(frozen=True)
@@ -74,7 +94,12 @@ class ModelInfo:
             headers=data.get("headers", {}),
             extra=data.get("extra", {}),
             dimension=data.get("dimension"),
-            batch_size=data.get("batch_size", 40),
+            batch_size=resolve_embedding_batch_size(
+                data["provider_id"],
+                data["model_id"],
+                data["model_type"],
+                data.get("batch_size"),
+            ),
         )
 
 
@@ -157,7 +182,12 @@ class ModelCache:
                     headers=dict(provider.headers_json or {}),
                     extra=dict(provider.extra_json or {}),
                     dimension=model.get("dimension"),
-                    batch_size=model.get("batch_size", 40),
+                    batch_size=resolve_embedding_batch_size(
+                        provider.provider_id,
+                        model["id"],
+                        model_type,
+                        model.get("batch_size"),
+                    ),
                 )
                 new_cache[info.spec] = info
 

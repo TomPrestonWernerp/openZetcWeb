@@ -62,6 +62,62 @@ def test_infrastructure_config_rejects_unknown_provider(tmp_path):
         cfg.update_infrastructure_config("vector_database", {"provider": "unknown"})
 
 
+def test_internal_neo4j_credentials_always_use_deployment_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("NEO4J_USERNAME", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "env-password")
+    cfg = Config(save_dir=str(tmp_path))
+
+    resolved = cfg.resolve_infrastructure_config(
+        "graph_database",
+        {
+            "provider": "neo4j",
+            "uri": "bolt://graph:7687",
+            "username": "stale-user",
+            "password": "stale-password",
+        },
+    )
+
+    assert resolved["username"] == "neo4j"
+    assert resolved["password"] == "env-password"
+
+
+def test_external_neo4j_credentials_are_not_overridden_by_deployment_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("NEO4J_PASSWORD", "env-password")
+    cfg = Config(save_dir=str(tmp_path))
+
+    resolved = cfg.resolve_infrastructure_config(
+        "graph_database",
+        {
+            "provider": "neo4j",
+            "uri": "bolt+s://external.example.com:7687",
+            "username": "external-user",
+            "password": "external-password",
+        },
+    )
+
+    assert resolved["username"] == "external-user"
+    assert resolved["password"] == "external-password"
+
+
+def test_internal_minio_credentials_always_use_deployment_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "env-access")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "env-secret")
+    cfg = Config(save_dir=str(tmp_path))
+
+    resolved = cfg.resolve_infrastructure_config(
+        "object_storage",
+        {
+            "provider": "minio",
+            "endpoint": "http://minio:9000",
+            "access_key": "stale-access",
+            "secret_key": "stale-secret",
+        },
+    )
+
+    assert resolved["access_key"] == "env-access"
+    assert resolved["secret_key"] == "env-secret"
+
+
 def test_infrastructure_config_is_not_written_to_toml(tmp_path, monkeypatch):
     config_module = importlib.import_module("openzetc.config.app")
     monkeypatch.setattr(config_module.runtime_cache, "save_runtime_config", lambda _config: None)

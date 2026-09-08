@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import tomli
 import tomli_w
@@ -270,7 +271,42 @@ class Config(BaseModel):
             if field_name in SENSITIVE_INFRASTRUCTURE_FIELDS and value == MASKED_SECRET:
                 continue
             resolved[key] = value
+        self._apply_internal_service_environment_credentials(section, resolved)
         return resolved
+
+    def _apply_internal_service_environment_credentials(self, section: str, resolved: dict[str, Any]) -> None:
+        """内置容器服务始终使用部署环境凭据，避免历史数据库配置覆盖 .env.prod。"""
+        local_service = {
+            "object_storage": {
+                "provider": "minio",
+                "uri_field": "endpoint",
+                "host": "minio",
+                "credentials": {
+                    "access_key": "object_storage_access_key",
+                    "secret_key": "object_storage_secret_key",
+                },
+            },
+            "graph_database": {
+                "provider": "neo4j",
+                "uri_field": "uri",
+                "host": "graph",
+                "credentials": {
+                    "username": "graph_database_username",
+                    "password": "graph_database_password",
+                },
+            },
+        }.get(section)
+        if local_service is None or resolved.get("provider") != local_service["provider"]:
+            return
+
+        uri = str(resolved.get(local_service["uri_field"]) or "")
+        if urlsplit(uri).hostname != local_service["host"]:
+            return
+
+        for key, field_name in local_service["credentials"].items():
+            environment_value = self._infrastructure_environment_defaults.get(field_name)
+            if environment_value not in (None, ""):
+                resolved[key] = environment_value
 
     def update_infrastructure_config(self, section: str, values: dict[str, Any]) -> None:
         resolved = self.resolve_infrastructure_config(section, values)

@@ -98,7 +98,8 @@ class BaseEmbeddingModel(ABC):
 
     async def test_connection(self) -> tuple[bool, str]:
         try:
-            embeddings = await self.aencode(["Hello world"])
+            # 使用真实运行批次探测，避免单条测试通过、批量入库却被供应商拒绝。
+            embeddings = await self.aencode(["Hello world"] * self.batch_size)
             if self.dimension not in (None, ""):
                 actual_dimension = len(embeddings[0]) if embeddings else 0
                 expected_dimension = int(self.dimension)

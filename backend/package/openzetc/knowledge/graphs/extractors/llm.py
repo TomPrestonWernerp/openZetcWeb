@@ -25,6 +25,7 @@ JSON 格式：
 SCHEMA_INSTRUCTION = """抽取 Schema 约束：
 {schema}
 """
+DEFAULT_GRAPH_LLM_TIMEOUT_SECONDS = 120.0
 
 
 class LLMGraphExtractor(GraphExtractor):
@@ -44,12 +45,18 @@ class LLMGraphExtractor(GraphExtractor):
             raise ValueError("LLM 抽取器 concurrency_count 必须在 1 到 1000 之间")
         if self.options.get("model_params") is not None and not isinstance(self.options["model_params"], dict):
             raise ValueError("LLM 抽取器 model_params 必须是对象")
+        try:
+            timeout_seconds = float(self.options.get("timeout_seconds", DEFAULT_GRAPH_LLM_TIMEOUT_SECONDS))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("LLM 抽取器 timeout_seconds 必须是数字") from exc
+        if timeout_seconds < 10 or timeout_seconds > 600:
+            raise ValueError("LLM 抽取器 timeout_seconds 必须在 10 到 600 之间")
 
     async def extract(self, text: str, *, chunk_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         self.validate_options()
         model = select_model(
             model_spec=self.options["model_spec"],
-            timeout=60.0,
+            timeout=float(self.options.get("timeout_seconds", DEFAULT_GRAPH_LLM_TIMEOUT_SECONDS)),
             model_params=self.options.get("model_params") or {},
         )
         prompt = self._build_prompt(text)
