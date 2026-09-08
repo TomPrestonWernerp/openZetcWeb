@@ -1,5 +1,6 @@
 import os
 
+import httpx
 import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
@@ -130,6 +131,30 @@ async def test_fetch_remote_models_loads_embedding_only_when_capability_enabled(
     assert [model["type"] for model in models] == ["chat", "embedding"]
 
 
+@pytest.mark.asyncio
+async def test_fetch_remote_models_ignores_optional_embedding_endpoint_404(monkeypatch):
+    async def fake_fetch(client, provider, headers, endpoint, model_type):
+        if model_type == "embedding":
+            request = httpx.Request("GET", "https://example.com/v1/embeddings/models")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        return [{"id": "chat-model", "type": "chat"}]
+
+    monkeypatch.setattr("openzetc.models.providers.service._fetch_models_from_endpoint", fake_fetch)
+
+    class Provider:
+        base_url = "https://example.com/v1"
+        api_key = None
+        api_key_env = None
+        headers_json = {}
+        capabilities = ["chat", "embedding"]
+        models_endpoint = "/models"
+        embedding_models_endpoint = "/embeddings/models"
+        rerank_models_endpoint = None
+
+    assert await fetch_remote_models(Provider()) == [{"id": "chat-model", "type": "chat"}]
+
+
 def test_normalize_payload_rejects_ollama_provider_type():
     with pytest.raises(ValueError, match="provider_type 必须是"):
         _normalize_payload(
@@ -184,6 +209,7 @@ def test_builtin_dashscope_provider_includes_default_embedding_and_rerank_models
     assert "rerank_models_endpoint" not in provider
     assert models["text-embedding-v4"]["type"] == "embedding"
     assert models["text-embedding-v4"]["dimension"] == 1024
+    assert models["text-embedding-v4"]["batch_size"] == 10
     assert models["qwen3-rerank"]["type"] == "rerank"
 
 

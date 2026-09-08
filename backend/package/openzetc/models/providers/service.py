@@ -17,6 +17,7 @@ from openzetc.models.providers.repository import (
     update_model_provider,
 )
 from openzetc.storage.postgres.models_business import ModelProvider
+from openzetc.utils import logger
 
 VALID_MODEL_TYPES = {"chat", "embedding", "rerank"}
 VALID_MODEL_SOURCES = {"manual", "remote"}
@@ -357,9 +358,19 @@ async def fetch_remote_models(provider: ModelProvider) -> list[dict[str, Any]]:
             *[
                 _fetch_models_from_endpoint(client, provider, headers, endpoint, model_type)
                 for endpoint, model_type in endpoint_specs
-            ]
+            ],
+            return_exceptions=True,
         )
-        for fetched_models in results:
+        for (endpoint, model_type), fetched_models in zip(endpoint_specs, results, strict=True):
+            if isinstance(fetched_models, Exception):
+                if (
+                    model_type != "chat"
+                    and isinstance(fetched_models, httpx.HTTPStatusError)
+                    and fetched_models.response.status_code == 404
+                ):
+                    logger.warning(f"模型供应商可选端点不可用，已跳过: type={model_type}, endpoint={endpoint}")
+                    continue
+                raise fetched_models
             for model in fetched_models:
                 model_key = (model["id"], model["type"])
                 if model_key in seen_ids:

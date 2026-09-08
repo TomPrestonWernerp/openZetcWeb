@@ -32,6 +32,7 @@ from openzetc.utils.datetime_utils import utc_isoformat
 GRAPH_CONFIG_KEY = "graph_build_config"
 GRAPH_TASK_TYPE = "knowledge_graph_index"
 NEO4J_QUERY_OFFLOAD_LIMIT = 8
+LLM_GRAPH_MAX_WORKERS = 4
 _neo4j_query_offload_semaphore_refs: dict[
     int,
     tuple[weakref.ReferenceType[asyncio.AbstractEventLoop], weakref.ReferenceType[asyncio.Semaphore]],
@@ -290,7 +291,7 @@ class MilvusGraphService:
             worker_count = int((config.get("extractor_options") or {}).get("concurrency_count") or 1)
         except (TypeError, ValueError):
             return 1
-        return max(1, min(worker_count, 1000))
+        return max(1, min(worker_count, LLM_GRAPH_MAX_WORKERS))
 
     @staticmethod
     def _runtime_extractor_options(config: dict[str, Any]) -> dict[str, Any]:

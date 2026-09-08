@@ -218,19 +218,23 @@ async def test_langchain_chat_adapter_preserves_call_response_contract():
 
 @pytest.mark.asyncio
 async def test_embedding_connection_checks_configured_dimension(monkeypatch):
+    captured = {}
     model = OtherEmbedding(
         model="namespace/embedding-model",
         base_url="https://example.com/v1/embeddings",
         api_key="test-key",
         dimension=3,
+        batch_size=10,
     )
 
-    async def fake_aencode(_messages):
-        return [[0.1, 0.2, 0.3]]
+    async def fake_aencode(messages):
+        captured["messages"] = messages
+        return [[0.1, 0.2, 0.3] for _ in messages]
 
     monkeypatch.setattr(model, "aencode", fake_aencode)
 
     assert await model.test_connection() == (True, "连接正常")
+    assert len(captured["messages"]) == 10
 
 
 @pytest.mark.asyncio

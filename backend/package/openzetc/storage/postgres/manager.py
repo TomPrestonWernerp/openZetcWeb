@@ -5,7 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from psycopg_pool import AsyncConnectionPool
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 from openzetc.storage.postgres.models_business import AGENT_RUN_TERMINAL_STATUSES
@@ -17,6 +17,15 @@ from openzetc.utils.singleton import SingletonMeta
 # 合并两个 Base
 CombinedBase = declarative_base()
 AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_TERMINAL_STATUSES)
+
+
+def redact_postgres_url(db_url: str) -> str:
+    """保留连接目标用于诊断，同时保证凭据不会进入日志。"""
+    try:
+        return make_url(db_url).render_as_string(hide_password=True)
+    except Exception:
+        return "<redacted database URL>"
+
 
 # 继承所有表
 for module in [KnowledgeBase, BusinessBase]:
@@ -86,7 +95,7 @@ class PostgresManager(metaclass=SingletonMeta):
             )
 
             self._initialized = True
-            logger.info(f"PostgreSQL manager initialized for knowledge base: {db_url.split('@')[0]}://***")
+            logger.info(f"PostgreSQL manager initialized for knowledge base: {redact_postgres_url(db_url)}")
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL manager: {e}")
             # 不抛出异常，允许应用启动，但在使用时会报错

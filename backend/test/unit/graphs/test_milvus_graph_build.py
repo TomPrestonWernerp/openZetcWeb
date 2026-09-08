@@ -110,6 +110,32 @@ def test_llm_graph_extractor_appends_schema_to_fixed_prompt():
     assert "文本：\n张三任职于公司" in prompt
 
 
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_uses_resilient_default_timeout(monkeypatch):
+    captured = {}
+
+    class FakeModel:
+        async def call(self, prompt, stream=False):
+            return SimpleNamespace(content='{"relations": []}')
+
+    def fake_select_model(**kwargs):
+        captured.update(kwargs)
+        return FakeModel()
+
+    monkeypatch.setattr("openzetc.knowledge.graphs.extractors.llm.select_model", fake_select_model)
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    assert await extractor.extract("测试文本") == {"relations": []}
+    assert captured["timeout"] == 120.0
+
+
+def test_llm_graph_extractor_rejects_invalid_timeout():
+    extractor = LLMGraphExtractor({"model_spec": "test/model", "timeout_seconds": 5})
+
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        extractor.validate_options()
+
+
 def test_graph_extractor_factory_supports_only_llm():
     assert GraphExtractorFactory.supported_types() == ["llm"]
 
@@ -181,6 +207,15 @@ async def test_milvus_graph_service_configure_persists_updated_concurrency():
     assert status["config"]["extractor_options"]["concurrency_count"] == 9
     assert status["entity_count"] == 3
     assert status["relationship_count"] == 2
+
+
+def test_milvus_graph_service_caps_runtime_llm_concurrency():
+    config = {
+        "extractor_type": "llm",
+        "extractor_options": {"model_spec": "test/model", "concurrency_count": 100},
+    }
+
+    assert MilvusGraphService._get_worker_count(config) == 4
 
 
 def test_milvus_graph_service_writes_chunk_entity_and_relation():

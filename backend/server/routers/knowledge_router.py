@@ -66,6 +66,7 @@ DOCUMENT_ACTION_RESULT_ITEM_LIMIT = 200
 MAX_DIRECT_DOCUMENT_ACTION_FILE_IDS = 1000
 PENDING_PARSE_STATUSES = ["uploaded"]
 PENDING_INDEX_STATUSES = ["parsed", "error_indexing"]
+IDEMPOTENT_PARSE_STATUSES = {"parsed", "parsing"}
 
 
 class UpdateDatabaseRequest(BaseModel):
@@ -831,7 +832,13 @@ async def add_documents(
                 item = record["item"]
                 file_id = record["file_id"]
                 try:
-                    file_meta = await knowledge_base.parse_file(kb_id, file_id, operator_id=current_user.uid)
+                    existing_file_meta = record["file_meta"]
+                    if existing_file_meta.get("status") in IDEMPOTENT_PARSE_STATUSES:
+                        file_meta = dict(existing_file_meta)
+                        file_meta["skipped"] = True
+                        file_meta["message"] = f"文件已处于 {file_meta['status']} 状态，跳过重复解析"
+                    else:
+                        file_meta = await knowledge_base.parse_file(kb_id, file_id, operator_id=current_user.uid)
                     record["file_meta"] = file_meta
                     if not auto_index or file_meta.get("status") != "parsed":
                         processed_items[record["index"]] = file_meta
@@ -1051,7 +1058,13 @@ async def _run_parse_file_ids(
         await context.set_progress(progress, f"正在解析第 {idx}/{total} 个文档")
 
         try:
-            result = await knowledge_base.parse_file(kb_id, file_id, operator_id=operator_id)
+            file_meta = await knowledge_base.get_file_basic_info(kb_id, file_id)
+            if file_meta.get("status") in IDEMPOTENT_PARSE_STATUSES:
+                result = dict(file_meta)
+                result["skipped"] = True
+                result["message"] = f"文件已处于 {result['status']} 状态，跳过重复解析"
+            else:
+                result = await knowledge_base.parse_file(kb_id, file_id, operator_id=operator_id)
             processed_items.append(result)
         except Exception as e:
             logger.error(f"Parse failed for {file_id}: {e}")

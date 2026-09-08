@@ -64,6 +64,71 @@ def test_model_cache_prefers_model_base_url_override(monkeypatch):
     assert saved_cache["alibaba:qwen3-rerank"].base_url == "https://invalid.example/rerank"
 
 
+def test_model_cache_applies_dashscope_embedding_batch_limit_to_legacy_config(monkeypatch):
+    saved_cache = {}
+
+    class Provider:
+        is_enabled = True
+        provider_id = "alibaba"
+        api_key = "sk-test"
+        api_key_env = None
+        provider_type = "openai"
+        base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        embedding_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
+        rerank_base_url = None
+        headers_json = {}
+        extra_json = {}
+        enabled_models = [{"id": "text-embedding-v4", "type": "embedding"}]
+
+    cache = ModelCache()
+    monkeypatch.setattr(cache, "_save_cache", lambda data: saved_cache.update(data))
+
+    cache.rebuild([Provider()])
+
+    assert saved_cache["alibaba:text-embedding-v4"].batch_size == 10
+
+
+def test_model_cache_preserves_explicit_embedding_batch_size(monkeypatch):
+    saved_cache = {}
+
+    class Provider:
+        is_enabled = True
+        provider_id = "alibaba"
+        api_key = "sk-test"
+        api_key_env = None
+        provider_type = "openai"
+        base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        embedding_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
+        rerank_base_url = None
+        headers_json = {}
+        extra_json = {}
+        enabled_models = [{"id": "text-embedding-v4", "type": "embedding", "batch_size": 8}]
+
+    cache = ModelCache()
+    monkeypatch.setattr(cache, "_save_cache", lambda data: saved_cache.update(data))
+
+    cache.rebuild([Provider()])
+
+    assert saved_cache["alibaba:text-embedding-v4"].batch_size == 8
+
+
+def test_model_cache_caps_stale_dashscope_batch_size_from_redis():
+    info = ModelInfo.from_dict(
+        {
+            "provider_id": "alibaba",
+            "model_id": "text-embedding-v4",
+            "model_type": "embedding",
+            "display_name": "text-embedding-v4",
+            "api_key": "sk-test",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+            "provider_type": "openai",
+            "batch_size": 40,
+        }
+    )
+
+    assert info.batch_size == 10
+
+
 def test_model_cache_loads_from_redis_and_uses_local_ttl(monkeypatch: pytest.MonkeyPatch):
     redis = _FakeRedis()
     _patch_redis(monkeypatch, redis)

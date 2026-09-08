@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from openzetc.storage.postgres.manager import PostgresManager
+from openzetc.storage.postgres.manager import PostgresManager, redact_postgres_url
+
+
+def test_redact_postgres_url_hides_password_and_keeps_target():
+    redacted = redact_postgres_url("postgresql+asyncpg://openzetc:super-secret@postgres:5432/openzetc")
+
+    assert "super-secret" not in redacted
+    assert redacted == "postgresql+asyncpg://openzetc:***@postgres:5432/openzetc"
 
 
 class _RecordingConnection:
