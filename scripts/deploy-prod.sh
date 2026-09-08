@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Linux executes this file directly, so keep its line endings as LF.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
