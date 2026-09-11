@@ -67,6 +67,7 @@ MAX_DIRECT_DOCUMENT_ACTION_FILE_IDS = 1000
 PENDING_PARSE_STATUSES = ["uploaded"]
 PENDING_INDEX_STATUSES = ["parsed", "error_indexing"]
 IDEMPOTENT_PARSE_STATUSES = {"parsed", "parsing"}
+KNOWLEDGE_QUERY_TIMEOUT_SECONDS = 90
 
 
 class UpdateDatabaseRequest(BaseModel):
@@ -1666,8 +1667,10 @@ async def query_knowledge_base(
     await _ensure_knowledge_query_access(current_user, kb_id, db)
     logger.debug(f"Query knowledge base {kb_id}: {query}")
     try:
-        result = await knowledge_base.aquery(query, kb_id=kb_id, **meta)
+        result = await _run_knowledge_query(query, kb_id, meta)
         return {"result": result, "status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"知识库查询失败 {e}, {traceback.format_exc()}")
         return {"message": f"知识库查询失败: {e}", "status": "failed"}
@@ -1683,11 +1686,25 @@ async def query_test(
     """测试查询知识库"""
     logger.debug(f"Query test in {kb_id}: {query}")
     try:
-        result = await knowledge_base.aquery(query, kb_id=kb_id, **meta)
+        result = await _run_knowledge_query(query, kb_id, meta)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"测试查询失败 {e}, {traceback.format_exc()}")
         return {"message": f"测试查询失败: {e}", "status": "failed"}
+
+
+async def _run_knowledge_query(query: str, kb_id: str, meta: dict):
+    try:
+        async with asyncio.timeout(KNOWLEDGE_QUERY_TIMEOUT_SECONDS):
+            return await knowledge_base.aquery(query, kb_id=kb_id, **meta)
+    except TimeoutError as exc:
+        logger.exception(f"Knowledge query timed out: kb_id={kb_id}")
+        raise HTTPException(504, "知识库检索超时，请检查向量服务和嵌入模型连接后重试。") from exc
+    except Exception as exc:
+        logger.exception(f"Knowledge query failed: kb_id={kb_id}")
+        raise HTTPException(503, "知识库检索服务暂不可用，请检查后端检索日志后重试。") from exc
 
 
 @knowledge.put("/databases/{kb_id}/query-params")

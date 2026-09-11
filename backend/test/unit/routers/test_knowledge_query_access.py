@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import pytest
+
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -72,3 +75,27 @@ def test_user_cannot_query_knowledge_base_outside_acl(monkeypatch):
     assert response.json()["detail"] == "无权访问该知识库"
     assert calls == []
     assert permission_calls == []
+
+
+@pytest.mark.parametrize('endpoint', ['query', 'query-test'])
+@pytest.mark.parametrize('failure,expected', [('unavailable', 503), ('timeout', 504), ('success', 200)])
+def test_query_endpoints_return_results_or_explicit_failure(monkeypatch, endpoint, failure, expected):
+    client, _, _ = _client(monkeypatch, accessible=True)
+    client.app.dependency_overrides[knowledge_router.get_knowledge_access_user] = lambda: object()
+    chunks = [{"content": "water protection", "score": 0.8, "metadata": {"file_id": "f1"}}]
+
+    async def query(*args, **kwargs):
+        if failure == 'unavailable':
+            raise RuntimeError('unavailable')
+        if failure == 'timeout':
+            await asyncio.sleep(10)
+        return chunks
+
+    monkeypatch.setattr(knowledge_router.knowledge_base, 'aquery', query)
+    monkeypatch.setattr(knowledge_router, 'KNOWLEDGE_QUERY_TIMEOUT_SECONDS', 0.01)
+    response = client.post(f'/api/knowledge/databases/kb_1/{endpoint}', json={'query': 'water', 'meta': {}})
+    assert response.status_code == expected
+    if expected == 200:
+        assert (response.json()['result'] if endpoint == 'query' else response.json()) == chunks
+    else:
+        assert response.json()['detail']
