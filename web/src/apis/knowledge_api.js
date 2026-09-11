@@ -379,10 +379,25 @@ export const queryApi = {
    * @returns {Promise} - 测试结果
    */
   queryTest: async (kbId, query, meta = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/query-test`, {
-      query,
-      meta
-    })
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 100_000)
+    try {
+      return await apiAdminPost(
+        `/api/knowledge/databases/${kbId}/query-test`,
+        {
+          query,
+          meta
+        },
+        { signal: controller.signal }
+      )
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('知识库检索超时，请检查服务连接后重试。', { cause: error })
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
   },
 
   /**

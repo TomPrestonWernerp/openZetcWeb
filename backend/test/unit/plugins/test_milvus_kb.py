@@ -27,6 +27,40 @@ class FakeHit:
         }
 
 
+@pytest.mark.asyncio
+async def test_query_error_is_not_reported_as_empty_results():
+    collection = FakeCollection()
+    def fail(**kwargs):
+        raise RuntimeError("search unavailable")
+    collection.search = fail
+    with pytest.raises(RuntimeError, match="search unavailable"):
+        await make_kb(collection).aquery("water", "db", search_mode="keyword")
+
+
+@pytest.mark.asyncio
+async def test_recovering_search_reloads_once_and_returns_results():
+    from pymilvus.exceptions import MilvusException
+
+    collection = FakeCollection()
+    calls = []
+    def search(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise MilvusException(code=106, message="collection on recovering")
+        return [[FakeHit("recovered", 0.8)]]
+    collection.search = search
+    kb = make_kb(collection)
+    loads = []
+    async def reload(instance):
+        loads.append(instance)
+    kb._initialize_kb_instance = reload
+    result = await kb.aquery("water", "db", search_mode="keyword")
+    assert result[0]["content"] == "recovered"
+    assert loads == [collection]
+    assert len(calls) == 2
+    assert all(call["timeout"] == 30 for call in calls)
+
+
 class FakeCollection:
     def __init__(self, distance: float = 0.8):
         self.search_calls = []
@@ -100,8 +134,8 @@ async def test_initialize_collection_waits_until_milvus_reports_loaded(monkeypat
     class FakeCollectionForLoad:
         name = "collection_1"
 
-        def load(self):
-            calls.append(("load", {}))
+        def load(self, **kwargs):
+            calls.append(("load", kwargs))
 
     collection = FakeCollectionForLoad()
 
@@ -118,7 +152,7 @@ async def test_initialize_collection_waits_until_milvus_reports_loaded(monkeypat
     await kb._initialize_kb_instance(collection)
 
     assert calls == [
-        ("load", {}),
+        ("load", {"timeout": 120}),
         (
             "wait",
             {
@@ -619,6 +653,18 @@ async def test_vector_mode_ignores_metric_type_override():
     search_call = collection.search_calls[0]
     assert search_call["anns_field"] == "embedding"
     assert search_call["param"]["metric_type"] == VECTOR_METRIC_TYPE
+
+
+async def test_vector_mode_applies_similarity_threshold_to_cosine_scores():
+    collection = FakeCollection(distance=0.466)
+    kb = make_kb(collection)
+
+    filtered = await kb.aquery("vector query", "db", search_mode="vector", similarity_threshold=0.7)
+    visible = await kb.aquery("vector query", "db", search_mode="vector", similarity_threshold=0.0)
+
+    assert filtered == []
+    assert len(visible) == 1
+    assert visible[0]["score"] == 0.466
 
 
 async def test_hybrid_mode_uses_milvus_native_hybrid_search():

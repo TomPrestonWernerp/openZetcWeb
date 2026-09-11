@@ -40,7 +40,12 @@
           </div>
         </div>
 
-        <div class="query-results" v-if="queryResult">
+        <div v-if="searchLoading" class="no-results" role="status">
+          <a-spin />
+          <p>正在检索知识库，请稍候…</p>
+        </div>
+        <a-alert v-else-if="queryError" type="error" show-icon :message="queryError" />
+        <div class="query-results" v-else-if="queryResult">
           <!-- 原始数据显示 -->
           <div v-if="showRawData" class="result-raw">
             <pre>{{ JSON.stringify(queryResult, null, 2) }}</pre>
@@ -56,6 +61,7 @@
             <div v-else-if="Array.isArray(queryResult)" class="result-list">
               <div v-if="queryResult.length === 0" class="no-results">
                 <p>未找到相关结果</p>
+                <p>可尝试降低相似度阈值、切换混合检索，或确认文件已完成索引。</p>
               </div>
               <div v-else>
                 <div class="result-summary">
@@ -177,6 +183,7 @@ defineEmits(['toggleVisible'])
 
 const searchLoading = computed(() => store.state.searchLoading)
 const queryResult = ref('')
+const queryError = ref('')
 const showRawData = ref(false)
 const showQuerySuggestions = computed(() => !searchLoading.value && !queryResult.value)
 
@@ -297,22 +304,27 @@ watch(
 )
 
 const onQuery = async () => {
+  if (searchLoading.value) return
   if (!queryText.value.trim()) {
     message.error('请输入查询内容')
     return
   }
 
   store.state.searchLoading = true
+  queryResult.value = ''
+  queryError.value = ''
 
   // 从store中获取配置参数
   const queryMeta = { ...store.meta }
 
   try {
     const data = await queryApi.queryTest(store.database.kb_id, queryText.value.trim(), queryMeta)
+    if (data?.status === 'failed') throw new Error(data.message || '知识库检索失败')
     queryResult.value = data
   } catch (error) {
     console.error(error)
     message.error(error.message)
+    queryError.value = error.message || '知识库检索失败'
     queryResult.value = ''
   } finally {
     store.state.searchLoading = false

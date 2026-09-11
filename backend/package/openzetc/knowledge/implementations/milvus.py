@@ -19,6 +19,7 @@ from pymilvus import (
     db,
     utility,
 )
+from pymilvus.exceptions import MilvusException
 
 from openzetc.knowledge.base import FileStatus, KnowledgeBase
 from openzetc.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
@@ -496,7 +497,7 @@ class MilvusKB(KnowledgeBase):
     async def _initialize_kb_instance(self, instance: Any) -> None:
         """初始化 Milvus 集合（加载到内存）"""
         try:
-            await _run_milvus_query_io(instance.load)
+            await _run_milvus_query_io(instance.load, timeout=MILVUS_COLLECTION_LOAD_TIMEOUT_SECONDS)
             await _run_milvus_query_io(
                 utility.wait_for_loading_complete,
                 collection_name=instance.name,
@@ -929,6 +930,18 @@ class MilvusKB(KnowledgeBase):
             chunk["distance"] = hit.distance
         return chunk
 
+    async def _search_with_recovery(self, collection, method: str, **kwargs):
+        # A loaded collection can temporarily lose its query channels after a node restart.
+        # Never release it here: release would interrupt other users' searches.
+        for attempt in range(2):
+            try:
+                return await _run_milvus_query_io(getattr(collection, method), timeout=30, **kwargs)
+            except MilvusException as exc:
+                if attempt or exc.code != 106:
+                    raise
+                logger.warning(f"Milvus search recovering; waiting for collection before retry: {exc}")
+                await self._initialize_kb_instance(collection)
+
     async def aquery(self, query_text: str, kb_id: str, agent_call: bool = False, **kwargs) -> list[dict]:
         """异步查询知识库"""
         collection = await self._get_milvus_collection(kb_id)
@@ -973,8 +986,8 @@ class MilvusKB(KnowledgeBase):
 
                 search_params = {"metric_type": metric_type, "params": {"nprobe": 10}}
 
-                results = await _run_milvus_query_io(
-                    collection.search,
+                results = await self._search_with_recovery(
+                    collection, "search",
                     data=query_embedding,
                     anns_field="embedding",
                     param=search_params,
@@ -1004,8 +1017,8 @@ class MilvusKB(KnowledgeBase):
                     "params": {"drop_ratio_search": bm25_drop_ratio_search},
                 }
 
-                results = await _run_milvus_query_io(
-                    collection.search,
+                results = await self._search_with_recovery(
+                    collection, "search",
                     data=[query_text],
                     anns_field=CONTENT_SPARSE_FIELD,
                     param=bm25_search_params,
@@ -1048,8 +1061,8 @@ class MilvusKB(KnowledgeBase):
                     limit=bm25_top_k,
                     expr=file_expr,
                 )
-                results = await _run_milvus_query_io(
-                    collection.hybrid_search,
+                results = await self._search_with_recovery(
+                    collection, "hybrid_search",
                     reqs=[vector_request, bm25_request],
                     rerank=WeightedRanker(vector_weight, bm25_weight),
                     limit=recall_top_k,
@@ -1116,7 +1129,7 @@ class MilvusKB(KnowledgeBase):
 
         except Exception as e:
             logger.error(f"Milvus query error: {e}, {traceback.format_exc()}")
-            return []
+            raise
 
     async def _retrieve_graph_chunks(
         self,
