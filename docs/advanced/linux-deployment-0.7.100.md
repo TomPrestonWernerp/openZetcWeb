@@ -6,6 +6,8 @@
 
 ## 1. 部署前准备
 
+受影响的低指令集虚拟机必须使用项目提供的 Milvus SSE4.2 兼容镜像。该镜像固定基于 Milvus 2.5.6，通过关闭 AVX 位图分派避免 invalid opcode；它复用现有数据卷，不需要重新导入知识库。完整故障说明和一次性修复命令见 [Milvus 检索故障修复说明](https://github.com/TomPrestonWernerp/openZetcWeb/blob/release/0.7.100/MILVUS-SEARCH-FIX-0.7.100.md)。
+
 ### 1.1 服务器建议
 
 - Linux x86_64/amd64，建议 8 核 CPU、16 GB 内存、100 GB 以上可用磁盘；实际容量应按知识库文件、向量和图谱规模预留。
@@ -104,6 +106,9 @@ SANDBOX_PROVISIONER_TOKEN=<独立随机值，至少 32 个字符>
 
 # 同域部署可留空；前后端跨域时填写实际来源，多个来源用逗号分隔。
 OPENZETC_CORS_ORIGINS=
+
+# 仅在已确认没有可用 AVX/AVX2/AVX512 的虚拟机上设置
+MILVUS_IMAGE=openzetc-milvus:2.5.6-sse42
 ```
 
 注意：
@@ -114,6 +119,18 @@ OPENZETC_CORS_ORIGINS=
 - 内置容器 `minio` 与 `graph` 的账号密码以 `.env.prod` 为唯一运行时来源；数据库中曾保存的本机 MinIO/Neo4j 历史密码不会覆盖生产环境变量。外部托管来源仍使用各自保存的凭据。
 - 模型 API Key 可在首次登录后的“用户设置”中配置，不需要写入镜像。
 - 第三方对象存储、向量数据库和图数据库配置保存在 PostgreSQL；Docker 重启不会丢失，但 PostgreSQL 与相关数据卷仍必须纳入备份。
+
+### 2.1 低指令集服务器的 Milvus 兼容镜像
+
+只在服务器确认 CPU 只有 SSE4.2、且日志出现 invalid opcode 时设置 MILVUS_IMAGE。首次部署或迁移时先构建兼容镜像，再启动 Milvus：
+
+    chmod +x docker/milvus-sse42/build.sh
+    bash docker/milvus-sse42/build.sh
+
+    docker compose --env-file .env.prod -f docker-compose.prod.yml \
+      up -d --no-deps --force-recreate --wait --wait-timeout 120 milvus
+
+该命令只替换 Milvus 容器，复用 docker/volumes/milvus/、MinIO 和 etcd 数据。不要执行 docker compose down -v。兼容镜像固定基于 2.5.6，升级 Milvus 前必须重新做真实向量检索验证。
 
 ### 从其他环境迁移 PostgreSQL 时的加密密钥
 
@@ -151,14 +168,14 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml config >/dev/null
 
 ## 3. 首次启动
 
-推荐使用部署脚本完成环境检查、Nginx/证书路径检查、构建、启动和 API/Worker 密钥一致性
+受影响服务器先按 2.1 构建并启动兼容 Milvus；其它服务器直接执行部署脚本。推荐使用部署脚本完成环境检查、Nginx/证书路径检查、构建、启动和 API/Worker 密钥一致性
 校验：
 
 ```bash
 bash scripts/deploy-prod.sh
 ```
 
-也可以手工构建并启动核心服务：
+也可以手工构建并启动核心服务（已设置兼容镜像的服务器必须先完成 2.1）：
 
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml \
@@ -292,7 +309,7 @@ git switch release/0.7.100
 
 ## 6. 完整版本升级
 
-如果更新包含后端、Worker、Compose、环境变量、数据库结构或基础设施配置，不能只更新 Web。先做第 4 节备份，再执行：
+如果更新包含后端、Worker、Compose、环境变量、数据库结构或基础设施配置，不能只更新 Web。先做第 4 节备份，并确认 .env.prod 仍保留 MILVUS_IMAGE，再执行：
 
 ```bash
 cd /opt/openzetc/openZetcWeb
@@ -307,6 +324,13 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml \
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
 
+如果本次改动包含 docker/milvus-sse42/ 下的文件，先重新构建兼容镜像并仅重建 Milvus：
+
+    bash docker/milvus-sse42/build.sh
+    docker compose --env-file .env.prod -f docker-compose.prod.yml \
+      up -d --no-deps --force-recreate --wait --wait-timeout 120 milvus
+    bash scripts/check-milvus-search.sh kb_f8smdhu85m
+
 升级后同时检查 API、Worker、Web、PostgreSQL、MinIO、Milvus 和 Neo4j 日志：
 
 ```bash
@@ -317,6 +341,18 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml \
 切换到后续新发布分支时，还要同步修改 `.env.prod` 中的 `OPENZETC_VERSION`。不要跨版本复用未经核对的 Compose 文件或环境变量模板。
 
 ## 7. 常见问题
+
+### 知识库检索显示无结果或服务不可用
+
+先区分 HTTP 200 的合法空结果和 Milvus 进程崩溃：
+
+```bash
+docker inspect -f 'image={{.Config.Image}} restart={{.RestartCount}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{end}}' milvus
+bash scripts/check-milvus-search.sh kb_f8smdhu85m
+docker logs --since 10m milvus 2>&1 | grep -Ei 'invalid opcode|panic|segmentation fault' || true
+```
+
+如果日志有 invalid opcode，确认使用 openzetc-milvus:2.5.6-sse42，并按 2.1 重建；如果容器 healthy 且只返回 HTTP 200 空列表，再检查相似度阈值、检索模式和集合向量数量。
 
 ### 页面显示 502 Bad Gateway
 
