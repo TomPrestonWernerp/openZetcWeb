@@ -1,0 +1,2 @@
+common:
+  simdType: sse4_2

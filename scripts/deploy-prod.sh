@@ -24,7 +24,11 @@ for required_file in "${required_files[@]}"; do
 done
 
 "${COMPOSE[@]}" config --quiet
-"${COMPOSE[@]}" up -d --build --force-recreate
+# Build before interrupting application services. Infrastructure upgrades are
+# separate maintenance operations; ordinary code updates preserve containers.
+"${COMPOSE[@]}" build api worker web
+"${COMPOSE[@]}" up -d --no-recreate --wait --wait-timeout 300 etcd minio postgres redis graph milvus sandbox-provisioner
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 api worker web
 "${COMPOSE[@]}" ps
 
 api_hash="$("${COMPOSE[@]}" exec -T api python -c 'import hashlib,os; print(hashlib.sha256(os.environ["INFRASTRUCTURE_CONFIG_ENCRYPTION_KEY"].encode()).hexdigest())')"
@@ -68,5 +72,6 @@ if [[ -f "$TRANSFER_ENV" ]]; then
   echo "基础设施密钥已导入 .env.prod，迁移文件已安全删除。"
 fi
 
-echo "部署完成。配置密钥指纹：${api_hash:0:12}（仅哈希，不是原密钥）"
+echo "应用部署完成。配置密钥指纹：${api_hash:0:12}（仅哈希，不是原密钥）"
+echo "容器健康不代表知识库检索正常，请执行：bash scripts/check-milvus-search.sh <知识库ID>"
 echo "请检查：${COMPOSE[*]} logs --tail=200 api worker web"
