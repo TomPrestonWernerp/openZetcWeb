@@ -6,10 +6,14 @@ import asyncio
 import base64
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +30,12 @@ from openzetc.utils import logger
 SUPPORTED_FILE_EXTENSIONS: tuple[str, ...] = (
     ".txt",
     ".md",
+    ".doc",
     ".docx",
     ".html",
     ".htm",
+    ".mhtml",
+    ".mht",
     ".json",
     ".csv",
     ".xls",
@@ -202,6 +209,83 @@ def _convert_docx_with_python_docx(file_path: Path) -> str:
     return "\n\n".join(blocks).strip()
 
 
+def _convert_doc_with_libreoffice(file_path: Path) -> str:
+    """使用 LibreOffice 将旧版 DOC 转为 DOCX 后提取正文。"""
+    executable = shutil.which("soffice") or shutil.which("libreoffice")
+    if not executable:
+        raise RuntimeError("DOC 解析依赖 LibreOffice，请先安装 soffice/libreoffice")
+
+    timeout_seconds = 60
+    with tempfile.TemporaryDirectory(prefix="openzetc-doc-") as temp_dir:
+        temp_path = Path(temp_dir)
+        input_path = temp_path / "source.doc"
+        output_path = temp_path / "source.docx"
+        profile_path = temp_path / "lo-profile"
+        profile_path.mkdir(parents=True, exist_ok=True)
+        input_path.write_bytes(file_path.read_bytes())
+
+        command = [
+            executable,
+            "--headless",
+            "--nologo",
+            "--nofirststartwizard",
+            "--nodefault",
+            "--nolockcheck",
+            f"-env:UserInstallation={profile_path.resolve().as_uri()}",
+            "--convert-to",
+            "docx",
+            "--outdir",
+            str(temp_path),
+            str(input_path),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"DOC 转换超时（{timeout_seconds} 秒）") from exc
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
+            raise RuntimeError(f"DOC 转换失败: {detail or 'LibreOffice 执行失败'}")
+        if not output_path.exists():
+            detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
+            raise RuntimeError(f"DOC 转换失败: 未生成 DOCX 文件。{detail}")
+
+        return _convert_docx_with_python_docx(output_path)
+
+
+def _convert_mhtml_to_markdown(file_path: Path) -> str:
+    """解析 MHTML/MHT 网页归档中的主 HTML 或纯文本正文。"""
+    message = BytesParser(policy=policy.default).parsebytes(file_path.read_bytes())
+    body = message.get_body(preferencelist=("html", "plain"))
+    if body is None:
+        raise ValueError("MHTML 文件中未找到可解析的 HTML 或文本正文")
+
+    raw_content = body.get_payload(decode=True)
+    if raw_content is None:
+        payload = body.get_payload()
+        raw_content = payload.encode("utf-8") if isinstance(payload, str) else b""
+
+    charset = body.get_content_charset()
+    if not charset and body.get_content_type() == "text/html":
+        charset_match = re.search(rb"charset\s*=\s*[\"']?\s*([a-zA-Z0-9._-]+)", raw_content[:4096], re.IGNORECASE)
+        if charset_match:
+            charset = charset_match.group(1).decode("ascii")
+
+    try:
+        content = raw_content.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        content = raw_content.decode("utf-8", errors="replace")
+
+    if body.get_content_type() == "text/html":
+        return md_convert(content, heading_style="ATX").strip()
+    return content.strip()
+
+
 def _convert_csv_to_markdown(file_path: Path) -> str:
     import pandas as pd
 
@@ -354,11 +438,7 @@ async def _process_file_to_markdown_core(
             result = await asyncio.to_thread(_convert_with_docling, file_path_obj, params=params)
 
         elif file_ext == ".doc":
-            from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-
-            loader = UnstructuredWordDocumentLoader(str(file_path_obj))
-            docs = await asyncio.to_thread(loader.load)
-            result = "\n".join(doc.page_content for doc in docs).strip()
+            result = await asyncio.to_thread(_convert_doc_with_libreoffice, file_path_obj)
 
         elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]:
             text = await parse_image_async(str(file_path_obj), params=params)
@@ -369,6 +449,9 @@ async def _process_file_to_markdown_core(
                 content = await f.read()
             text = await asyncio.to_thread(md_convert, content, heading_style="ATX")
             result = f"{text}"
+
+        elif file_ext in [".mhtml", ".mht"]:
+            result = await asyncio.to_thread(_convert_mhtml_to_markdown, file_path_obj)
 
         elif file_ext == ".csv":
             result = await asyncio.to_thread(_convert_csv_to_markdown, file_path_obj)

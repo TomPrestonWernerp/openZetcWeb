@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import quopri
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -65,6 +66,54 @@ def test_parser_parse_docx_file_returns_markdown_text(tmp_path: Path, monkeypatc
     assert isinstance(markdown, str)
     assert "Parser DOCX content" in markdown
     assert len(markdown.strip()) > 0
+
+
+def test_parser_parse_doc_file_converts_with_libreoffice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    file_path = tmp_path / "parser_test.doc"
+    file_path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1legacy doc content")
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(parser_unified.shutil, "which", lambda _name: "/usr/bin/soffice")
+
+    def _fake_run(command, **_kwargs):
+        commands.append(command)
+        output_dir = Path(command[command.index("--outdir") + 1])
+        _build_docx(output_dir / "source.docx", "Parser legacy DOC content")
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(parser_unified.subprocess, "run", _fake_run)
+
+    markdown = Parser.parse(str(file_path))
+
+    assert "Parser legacy DOC content" in markdown
+    assert commands[0][commands[0].index("--convert-to") + 1] == "docx"
+
+
+@pytest.mark.parametrize("extension", [".mhtml", ".mht"])
+def test_parser_parse_mhtml_file_returns_markdown_text(tmp_path: Path, extension: str):
+    file_path = tmp_path / f"parser_test{extension}"
+    html = '<html><head><meta charset="UTF-8"></head><body><h1>归档标题</h1><p>网页归档正文</p></body></html>'
+    encoded_html = quopri.encodestring(html.encode("utf-8")).decode("ascii")
+    file_path.write_text(
+        "MIME-Version: 1.0\n"
+        'Content-Type: multipart/related; boundary="openzetc-boundary"\n\n'
+        "--openzetc-boundary\n"
+        "Content-Type: text/html\n"
+        "Content-Transfer-Encoding: quoted-printable\n\n"
+        f"{encoded_html}\n"
+        "--openzetc-boundary--\n",
+        encoding="ascii",
+    )
+
+    markdown = Parser.parse(str(file_path))
+
+    assert "# 归档标题" in markdown
+    assert "网页归档正文" in markdown
+
+
+@pytest.mark.parametrize("extension", [".doc", ".mhtml", ".mht"])
+def test_supported_file_extensions_include_legacy_word_and_web_archives(extension: str):
+    assert parser_unified.is_supported_file_extension(f"example{extension}")
 
 
 def test_convert_csv_to_markdown_preserves_column_dtypes(

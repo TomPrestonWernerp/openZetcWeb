@@ -94,6 +94,7 @@ class PendingIndexDocumentsRequest(BaseModel):
 
 media_types = {
     ".pdf": "application/pdf",
+    ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".txt": "text/plain",
     ".md": "text/markdown",
@@ -116,6 +117,8 @@ media_types = {
     ".gz": "application/gzip",
     ".html": "text/html",
     ".htm": "text/html",
+    ".mhtml": "multipart/related",
+    ".mht": "multipart/related",
     ".xml": "text/xml",
     ".css": "text/css",
     ".js": "application/javascript",

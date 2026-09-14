@@ -504,7 +504,7 @@ watch(
   }
 )
 
-const DEFAULT_SUPPORTED_TYPES = ['.txt', '.pdf', '.jpg', '.jpeg', '.md', '.docx']
+const DEFAULT_SUPPORTED_TYPES = ['.txt', '.pdf', '.jpg', '.jpeg', '.md', '.doc', '.docx', '.mhtml', '.mht']
 
 const normalizeExtensions = (extensions) => {
   if (!Array.isArray(extensions)) {
@@ -588,6 +588,7 @@ const chunkLoading = computed(() => store.state.chunkLoading)
 // 上传模式
 const uploadMode = ref('file')
 const MAX_UPLOAD_CONCURRENCY = 10
+const MAX_UPLOAD_FILE_SIZE_BYTES = 100 * 1024 * 1024
 
 // 文件列表
 const fileList = ref([])
@@ -1133,6 +1134,10 @@ const beforeUpload = (file) => {
     message.error(`不支持的文件类型：${file?.name || '未知文件'}`)
     return Upload.LIST_IGNORE
   }
+  if (file?.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    message.error(`文件 ${file.name} 超过 100 MB，无法上传`)
+    return Upload.LIST_IGNORE
+  }
   return true
 }
 
@@ -1345,7 +1350,9 @@ const runUploadTask = (task) => {
         errorResp = {}
       }
       file.response = errorResp
-      const error = new Error(errorResp.detail || 'Upload failed')
+      const fallbackMessage =
+        xhr.status === 413 ? '文件过大，当前仅支持 100 MB 以内的文件' : 'Upload failed'
+      const error = new Error(errorResp.detail || fallbackMessage)
       if (fileUid) {
         uploadTaskStatus.value[fileUid] = 'error'
       }
