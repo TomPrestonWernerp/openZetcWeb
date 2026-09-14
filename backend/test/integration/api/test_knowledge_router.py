@@ -687,6 +687,7 @@ async def test_get_supported_file_types(test_client, admin_headers):
     assert payload["message"] == "success"
     assert "file_types" in payload
     assert isinstance(payload["file_types"], list)
+    assert {".doc", ".mhtml", ".mht"}.issubset(payload["file_types"])
 
 
 async def test_markdown_endpoint_parses_uploaded_text_file(test_client, admin_headers):

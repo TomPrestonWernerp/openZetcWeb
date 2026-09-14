@@ -18,6 +18,8 @@
 - 图谱 LLM 抽取默认超时调整为 120 秒，运行期并发限制为最多 4 路，降低大批量构图时的超时与瞬时限流。
 - PyMilvus 约束为 2.5.x，并在 collection load 后等待 Milvus 明确返回加载完成；recovering 或超时的集合不会再被误缓存为可用。
 - 已处于 `parsed` 或 `parsing` 的文件会幂等跳过重复解析，已解析文件仍能继续自动入库。
+- 知识库文件上传和解析新增 `.doc`、`.mhtml`、`.mht` 支持；旧版 Word 文档通过 LibreOffice 转换后提取正文，网页归档从主 MIME 正文转换为 Markdown。
+- 生产 Nginx 上传请求体限制与后端 100 MB 单文件限制保持一致并预留 multipart 开销；前端会在选择阶段拦截超限文件，并明确显示 413 文件过大原因。
 - 对象存储使用受限凭据时，桶存在性和公共策略管理的 `AccessDenied` 降级为警告，并由真实对象操作判断读写权限。
 - 可选 embedding/rerank 模型列表端点返回 404 时不再影响 chat 模型列表；PostgreSQL 初始化日志完整隐藏密码。
 - 生产内置 MinIO、Neo4j 的运行时凭据统一以 `.env.prod` 为准，不再被数据库中的历史本机配置覆盖；Neo4j 与 PostgreSQL 健康检查改为真实鉴权，密码不一致时阻止 API/Worker 带故障启动。
