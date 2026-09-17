@@ -665,6 +665,7 @@ async def create_oidc_user(db, user_info: dict, department_id: int | None = None
             new_user = await user_repo.create(
                 {
                     "username": username,
+                    "name": (user_info.get("name") or "").strip()[:50] or None,
                     "uid": uid,
                     "phone_number": None,
                     "avatar": None,
@@ -702,6 +703,7 @@ async def restore_deleted_oidc_user(db, deleted_user: User, user_info: dict) -> 
     deleted_user.last_login = utc_now_naive()
     deleted_user.phone_number = None
     deleted_user.avatar = None
+    deleted_user.name = (user_info.get("name") or "").strip()[:50] or None
 
     if deleted_user.username.startswith("已注销用户-"):
         deleted_user.username = await build_unique_oidc_username(db, preferred_username, user_info["sub"])
@@ -854,6 +856,7 @@ async def oidc_callback_handler(code: str, state: str, db, request: Request | No
         "token_type": "bearer",
         "user_id": user.id,
         "username": user.username,
+        "name": user.name,
         "uid": user.uid,
         "phone_number": user.phone_number,
         "avatar": user.avatar,

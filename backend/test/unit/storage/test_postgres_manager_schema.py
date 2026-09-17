@@ -40,6 +40,24 @@ class _RecordingEngine:
 
 
 @pytest.mark.asyncio
+async def test_ensure_business_schema_adds_optional_user_name_column():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_business_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    assert "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS name VARCHAR(50)" in connection.statements
+
+
+@pytest.mark.asyncio
 async def test_ensure_business_schema_backfills_subagent_thread_columns_before_dropping_legacy_columns():
     manager = PostgresManager()
     original_initialized = manager._initialized

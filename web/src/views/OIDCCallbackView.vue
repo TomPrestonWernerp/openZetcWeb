@@ -70,6 +70,7 @@ const handleCallback = async () => {
     userStore.token = tokenData.access_token
     userStore.userId = tokenData.uid
     userStore.username = tokenData.username
+    userStore.name = tokenData.name || ''
     userStore.uid = tokenData.uid || ''
     userStore.phoneNumber = tokenData.phone_number || ''
     userStore.avatar = tokenData.avatar || ''

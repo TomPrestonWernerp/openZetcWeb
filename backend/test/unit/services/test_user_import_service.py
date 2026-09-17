@@ -37,6 +37,8 @@ def test_template_contains_stable_columns_and_instructions():
     workbook = load_workbook(BytesIO(create_user_import_template()), read_only=True)
     assert workbook.sheetnames == ["用户导入", "填写说明"]
     assert tuple(next(workbook["用户导入"].iter_rows(values_only=True))) == IMPORT_COLUMNS
+    example = tuple(next(workbook["用户导入"].iter_rows(min_row=2, max_row=2, values_only=True)))
+    assert example[2] == "张三"
 
 
 def test_read_rows_rejects_non_xlsx_and_missing_required_column():
@@ -66,8 +68,8 @@ def test_public_rows_never_expose_password():
 def test_read_rows_applies_row_limit(monkeypatch):
     monkeypatch.setattr("openzetc.services.user_import_service.MAX_IMPORT_ROWS", 1)
     content = _xlsx(
-        ("u001", "用户甲", "", "Pass1234", "信息部", ""),
-        ("u002", "用户乙", "", "Pass1234", "信息部", ""),
+        ("u001", "用户甲", "张三", "", "Pass1234", "信息部", ""),
+        ("u002", "用户乙", "李四", "", "Pass1234", "信息部", ""),
     )
     with pytest.raises(HTTPException, match="单次最多导入"):
         _read_rows(content, "users.xlsx")
@@ -97,8 +99,8 @@ async def test_validation_reports_duplicate_uid_unknown_department_and_role():
             department_id=department.id,
         )
         content = _xlsx(
-            ("same_uid", "用户甲", "13800138000", "Secure123", "信息部", "普通用户"),
-            ("same_uid", "用户乙", "13900139000", "Secure123", "不存在部门", "不存在角色"),
+            ("same_uid", "用户甲", "张三", "13800138000", "Secure123", "信息部", "普通用户"),
+            ("same_uid", "用户乙", "李四", "13900139000", "Secure123", "不存在部门", "不存在角色"),
         )
         summary, rows = await validate_user_import(
             db,
@@ -112,6 +114,7 @@ async def test_validation_reports_duplicate_uid_unknown_department_and_role():
         assert "uid 在文件内重复" in public_rows[0]["errors"]
         assert "部门不存在" in public_rows[1]["errors"]
         assert "角色不存在：不存在角色" in public_rows[1]["errors"]
+        assert public_rows[0]["name"] == "张三"
         assert all("_password" not in row and "password" not in row for row in public_rows)
     await engine.dispose()
 
@@ -146,8 +149,8 @@ async def test_validation_rejects_cross_department_and_elevated_roles():
             department_id=own_department.id,
         )
         content = _xlsx(
-            ("member001", "成员甲", "", "Secure123", "财务部", "普通用户"),
-            ("member002", "成员乙", "", "Secure123", "信息部", "部门管理员"),
+            ("member001", "成员甲", "成员甲", "", "Secure123", "财务部", "普通用户"),
+            ("member002", "成员乙", "成员乙", "", "Secure123", "信息部", "部门管理员"),
         )
         summary, rows = await validate_user_import(
             db,

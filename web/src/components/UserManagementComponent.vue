@@ -47,7 +47,7 @@
       <a-input
         v-model:value="userManagement.searchKeyword"
         class="search-input"
-        placeholder="搜索用户名 / ID / 手机号"
+        placeholder="搜索姓名 / 用户名 / ID / 手机号"
         allow-clear
       >
         <template #prefix><Search :size="16" /></template>
@@ -157,7 +157,7 @@
         :row-selection="rowSelection"
         :loading="userManagement.loading"
         :pagination="paginationConfig"
-        :scroll="{ x: 1120 }"
+        :scroll="{ x: 1220 }"
         @change="handleTableChange"
       >
         <template #emptyText>
@@ -183,6 +183,9 @@
                 <span class="user-uid">{{ record.uid || '-' }}</span>
               </div>
             </div>
+          </template>
+          <template v-else-if="column.key === 'name'">
+            <span>{{ record.name || '-' }}</span>
           </template>
           <template v-else-if="column.key === 'phone'">
             <span class="phone-text">{{ record.phone_number || '-' }}</span>
@@ -277,6 +280,13 @@
       @cancel="userManagement.modalVisible = false"
     >
       <a-form layout="vertical" class="user-form">
+        <a-form-item label="姓名" class="form-item">
+          <a-input
+            v-model:value="userManagement.form.name"
+            placeholder="请输入姓名（可选）"
+            :maxlength="50"
+          />
+        </a-form-item>
         <a-form-item label="用户名" required class="form-item">
           <a-input
             v-model:value="userManagement.form.username"
@@ -450,6 +460,9 @@
                 <span>{{ record.uid || '自动生成 ID' }}</span>
               </div>
             </template>
+            <template v-else-if="column.key === 'name'">
+              {{ record.name || '-' }}
+            </template>
             <template v-else-if="column.key === 'department'">
               {{ record.department_name || '-' }}
             </template>
@@ -527,6 +540,7 @@ const userStore = useUserStore()
 
 const userColumns = [
   { title: '用户', key: 'user', width: 210, fixed: 'left' },
+  { title: '姓名', key: 'name', width: 110 },
   { title: '手机号', key: 'phone', width: 128 },
   { title: '部门', key: 'department', width: 140 },
   { title: '旧角色', key: 'legacyRole', width: 106 },
@@ -540,6 +554,7 @@ const importColumns = [
   { title: '行', dataIndex: 'row', width: 54 },
   { title: '状态', key: 'status', width: 90 },
   { title: '用户', key: 'account', width: 150 },
+  { title: '姓名', key: 'name', width: 100 },
   { title: '手机号', dataIndex: 'phone_number', width: 120 },
   { title: '部门', key: 'department', width: 110 },
   { title: '角色', key: 'roles', width: 140 },
@@ -589,6 +604,7 @@ const importState = reactive({
 
 function emptyUserForm() {
   return {
+    name: '',
     username: '',
     generatedUid: '',
     phoneNumber: '',
@@ -634,7 +650,7 @@ const filteredUsers = computed(() => {
   return userManagement.users.filter((user) => {
     const matchesKeyword =
       !keyword ||
-      [user.username, user.uid, user.phone_number].some((value) =>
+      [user.name, user.username, user.uid, user.phone_number].some((value) =>
         String(value || '')
           .toLowerCase()
           .includes(keyword)
@@ -889,6 +905,7 @@ function showEditUserModal(user) {
   userManagement.editUserId = user.id
   userManagement.form = {
     ...emptyUserForm(),
+    name: user.name || '',
     username: user.username,
     generatedUid: user.uid || '',
     phoneNumber: user.phone_number || '',
@@ -936,7 +953,11 @@ async function handleUserFormSubmit() {
   userManagement.formSubmitting = true
   try {
     if (userManagement.editMode) {
-      const data = { username: form.username.trim(), phone_number: form.phoneNumber || '' }
+      const data = {
+        name: form.name.trim(),
+        username: form.username.trim(),
+        phone_number: form.phoneNumber || ''
+      }
       if (userStore.isSuperAdmin) data.role = form.role
       if (userStore.hasPermission('user.update', 'global') && form.departmentId) {
         data.department_id = form.departmentId
@@ -946,6 +967,7 @@ async function handleUserFormSubmit() {
       message.success('用户更新成功')
     } else {
       const data = {
+        name: form.name.trim() || null,
         username: form.username.trim(),
         password: form.password,
         role: userStore.isSuperAdmin ? form.role : 'user',
@@ -1071,6 +1093,7 @@ function applyImportResult(result) {
     errors: Array.isArray(row.errors) ? row.errors : row.errors ? [String(row.errors)] : [],
     uid: row.uid || '',
     username: row.username || '',
+    name: row.name || '',
     phone_number: row.phone_number || '',
     department_id: row.department_id ?? null,
     department_name: row.department_name || '',
