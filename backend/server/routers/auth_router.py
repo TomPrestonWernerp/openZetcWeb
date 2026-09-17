@@ -65,6 +65,7 @@ class Token(BaseModel):
     token_type: str
     user_id: int
     username: str
+    name: str | None = None
     uid: str  # 用于登录的user_id
     phone_number: str | None = None
     avatar: str | None = None
@@ -75,6 +76,7 @@ class Token(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
+    name: str | None = Field(default=None, max_length=50)
     password: str = Field(min_length=8)
     role: str = "user"
     phone_number: str | None = None
@@ -83,6 +85,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     username: str | None = None
+    name: str | None = Field(default=None, max_length=50)
     password: str | None = Field(default=None, min_length=8)
     role: str | None = None
     phone_number: str | None = None
@@ -103,6 +106,7 @@ class BatchUserDepartmentUpdate(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    name: str | None = None
     uid: str
     phone_number: str | None = None
     avatar: str | None = None
@@ -152,6 +156,7 @@ class OIDCLoginResponse(BaseModel):
     token_type: str
     user_id: int
     username: str
+    name: str | None = None
     uid: str
     phone_number: str | None = None
     avatar: str | None = None
@@ -301,6 +306,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         "token_type": "bearer",
         "user_id": user.id,
         "username": user.username,
+        "name": user.name,
         "uid": user.uid,
         "phone_number": user.phone_number,
         "avatar": normalize_public_minio_url(user.avatar),
@@ -437,6 +443,7 @@ async def initialize_admin(admin_data: InitializeAdmin, db: AsyncSession = Depen
         "token_type": "bearer",
         "user_id": new_admin.id,
         "username": new_admin.username,
+        "name": new_admin.name,
         "uid": new_admin.uid,
         "phone_number": new_admin.phone_number,
         "avatar": new_admin.avatar,
@@ -682,6 +689,7 @@ async def import_users(
         user = User(
             uid=row["uid"],
             username=row["username"],
+            name=row["name"],
             phone_number=row["phone_number"],
             password_hash=AuthUtils.hash_password(row["_password"]),
             role="user",
@@ -795,6 +803,7 @@ async def create_user(
     new_user = await user_repo.create(
         {
             "username": user_data.username,
+            "name": (user_data.name.strip() or None) if user_data.name is not None else None,
             "uid": uid,
             "phone_number": user_data.phone_number,
             "password_hash": hashed_password,
@@ -988,6 +997,10 @@ async def update_user(
             )
         user.username = user_data.username
         update_details.append(f"用户名: {user_data.username}")
+
+    if user_data.name is not None:
+        user.name = user_data.name.strip() or None
+        update_details.append(f"姓名: {user.name or '已清空'}")
 
     if user_data.password is not None:
         user.password_hash = AuthUtils.hash_password(user_data.password)
@@ -1258,6 +1271,7 @@ async def impersonate_user(
         "token_type": "bearer",
         "user_id": target_user.id,
         "username": target_user.username,
+        "name": target_user.name,
         "uid": target_user.uid,
         "phone_number": target_user.phone_number,
         "avatar": normalize_public_minio_url(target_user.avatar),

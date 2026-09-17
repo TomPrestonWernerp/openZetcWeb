@@ -6,17 +6,17 @@
           <FallbackAvatar
             :src="userStore.avatar"
             :default-src="avatarDefaultSrc"
-            :name="userStore.username"
+            :name="displayName"
             :seed="userStore.uid || userStore.username"
             kind="user"
             :size="32"
             shape="circle"
-            :alt="userStore.username"
+            :alt="displayName"
             class="avatar-image"
           />
           <!-- <div class="user-role-badge" :class="userRoleClass"></div> -->
         </div>
-        <div v-if="showRole" class="user-name">{{ userStore.username }}</div>
+        <div v-if="showRole" class="user-name">{{ displayName }}</div>
         <div v-if="slots.actions" class="user-info-actions">
           <slot name="actions" />
         </div>
@@ -25,7 +25,7 @@
         <a-menu>
           <a-menu-item key="user-info" @click="openProfile">
             <div class="user-info-display">
-              <div class="user-menu-username">{{ userStore.username }}</div>
+              <div class="user-menu-username">{{ displayName }}</div>
               <div class="user-menu-details">
                 <span class="user-menu-info">ID: {{ userStore.uid }}</span>
                 <span class="user-menu-role">{{ userRoleText }}</span>
@@ -88,6 +88,9 @@ const showDebug = ref(false)
 const { openSettingsModal } = inject('settingsModal', {})
 
 const avatarDefaultSrc = computed(() => (userStore.uid ? generatePixelAvatar(userStore.uid) : ''))
+const displayName = computed(
+  () => userStore.name?.trim() || userStore.uid || userStore.username || '用户'
+)
 
 defineProps({
   showRole: {

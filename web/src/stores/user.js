@@ -7,6 +7,7 @@ export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('user_token') || '')
   const userId = ref(null)
   const username = ref('')
+  const name = ref('')
   const uid = ref('')
   const phoneNumber = ref('')
   const avatar = ref('')
@@ -109,6 +110,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = data.access_token
       userId.value = data.user_id
       username.value = data.username
+      name.value = data.name || ''
       uid.value = data.uid
       phoneNumber.value = data.phone_number || ''
       avatar.value = data.avatar || ''
@@ -132,6 +134,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userId.value = null
     username.value = ''
+    name.value = ''
     uid.value = ''
     phoneNumber.value = ''
     avatar.value = ''
@@ -169,6 +172,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = data.access_token
       userId.value = data.user_id
       username.value = data.username
+      name.value = data.name || ''
       uid.value = data.uid
       phoneNumber.value = data.phone_number || ''
       avatar.value = data.avatar || ''
@@ -383,6 +387,7 @@ export const useUserStore = defineStore('user', () => {
       // 更新本地状态
       userId.value = userData.id
       username.value = userData.username
+      name.value = userData.name || ''
       uid.value = userData.uid
       phoneNumber.value = userData.phone_number || ''
       avatar.value = userData.avatar || ''
@@ -421,6 +426,9 @@ export const useUserStore = defineStore('user', () => {
       if (typeof userData.username === 'string') {
         username.value = userData.username
       }
+      if (typeof userData.name !== 'undefined') {
+        name.value = userData.name || ''
+      }
       if (typeof userData.phone_number !== 'undefined') {
         phoneNumber.value = userData.phone_number || ''
       }
@@ -437,6 +445,7 @@ export const useUserStore = defineStore('user', () => {
     token,
     userId,
     username,
+    name,
     uid,
     phoneNumber,
     avatar,

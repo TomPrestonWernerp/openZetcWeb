@@ -59,7 +59,8 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, nullable=False, unique=True, index=True)  # 显示名称
+    username = Column(String, nullable=False, unique=True, index=True)  # 用户名
+    name = Column(String(50), nullable=True)  # 姓名
     uid = Column(String, nullable=False, unique=True, index=True)  # 登录标识
     phone_number = Column(String, nullable=True, unique=True, index=True)  # 手机号
     avatar = Column(String, nullable=True)  # 头像URL
@@ -94,6 +95,7 @@ class User(Base):
         result = {
             "id": self.id,
             "username": self.username,
+            "name": self.name,
             "uid": self.uid,
             "phone_number": self.phone_number,
             "avatar": normalize_public_minio_url(self.avatar),

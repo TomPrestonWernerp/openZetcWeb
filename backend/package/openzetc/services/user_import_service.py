@@ -28,7 +28,7 @@ from openzetc.storage.postgres.models_business import (
 
 MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
 MAX_IMPORT_ROWS = 500
-IMPORT_COLUMNS = ("uid", "username", "phone_number", "password", "department", "roles")
+IMPORT_COLUMNS = ("uid", "username", "name", "phone_number", "password", "department", "roles")
 REQUIRED_COLUMNS = {"uid", "username", "password", "department"}
 WEAK_PASSWORDS = {"password", "password123", "12345678", "qwerty123", "admin123"}
 
@@ -38,19 +38,20 @@ def create_user_import_template() -> bytes:
     sheet = workbook.active
     sheet.title = "用户导入"
     sheet.append(IMPORT_COLUMNS)
-    sheet.append(("zhangsan", "张三", "13800138000", "ChangeMe123", "信息部", "普通用户"))
+    sheet.append(("zhangsan", "zhangsan", "张三", "13800138000", "ChangeMe123", "信息部", "普通用户"))
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="168CA3")
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = "A1:F2"
-    widths = (20, 18, 18, 20, 18, 35)
+    sheet.auto_filter.ref = "A1:G2"
+    widths = (20, 18, 16, 18, 20, 18, 35)
     for index, width in enumerate(widths, 1):
         sheet.column_dimensions[chr(64 + index)].width = width
     notes = workbook.create_sheet("填写说明")
     notes.append(("字段", "要求"))
     notes.append(("uid", "必填，3-20 位字母、数字或下划线，作为登录 ID"))
     notes.append(("username", "必填，2-20 位中文、字母、数字或下划线"))
+    notes.append(("name", "选填，用户姓名，最多 50 个字符"))
     notes.append(("phone_number", "选填，中国大陆手机号；填写时必须唯一"))
     notes.append(("password", "必填，至少 8 位，且同时包含字母和数字"))
     notes.append(("department", "必填，填写已有部门名称或 ID"))
@@ -183,6 +184,7 @@ async def validate_user_import(
     for row_number, raw in enumerate(raw_rows, 2):
         uid = _cell_text(raw.get("uid")).lower()
         username = _cell_text(raw.get("username"))
+        name = _cell_text(raw.get("name")) or None
         phone = _cell_text(raw.get("phone_number")) or None
         password = _cell_text(raw.get("password"))
         department_value = _cell_text(raw.get("department"))
@@ -200,6 +202,8 @@ async def validate_user_import(
             errors.append("用户名在文件内重复")
         elif username in existing_usernames:
             errors.append("用户名已存在")
+        if name and len(name) > 50:
+            errors.append("姓名不能超过 50 个字符")
         if phone:
             if not is_valid_phone_number(phone):
                 errors.append("手机号格式不正确")
@@ -271,6 +275,7 @@ async def validate_user_import(
                 "errors": errors,
                 "uid": uid,
                 "username": username,
+                "name": name,
                 "phone_number": phone,
                 "department_id": target_department.id if target_department else None,
                 "department_name": target_department.name if target_department else department_value,
